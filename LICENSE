@@ -1,0 +1,31 @@
+BlueIT Source-Available License
+
+Copyright (c) 2026 Nico Egger / BlueIT
+
+All rights reserved.
+
+Permission is granted to download, install, and use this software only for the purpose of running the original plugin on a Pelican Panel installation.
+
+You may:
+- download this software from the official GitHub repository or the Pelican Hub;
+- install and use this software on your own Pelican Panel installation;
+- view the source code for transparency, security review, and personal learning;
+- create private modifications for your own personal or internal use, as long as they are not distributed, published, reuploaded, sold, or made publicly available.
+
+You may not:
+- redistribute, reupload, mirror, sell, rent, sublicense, or otherwise provide copies of this software outside the official distribution channels approved by the copyright holder;
+- publish modified versions of this software;
+- publish forks or derivative works of this software;
+- remove, alter, or hide copyright notices, license notices, author names, project names, branding, or attribution;
+- rename this software and distribute it as a different project;
+- use this software or parts of it to create a competing plugin or service;
+- reverse engineer, extract, publish, leak, share, or abuse any API keys, proxy secrets, private endpoints, protected integration mechanisms, or private service credentials used by this software;
+- claim ownership or authorship of this software or any part of it.
+
+Third-party software, APIs, libraries, game files, mods, plugins, and external services used by this software remain the property of their respective owners and are governed by their own licenses and terms.
+
+CurseForge, Modrinth, Minecraft, Mojang, Microsoft, Pelican Panel, GeyserMC, Floodgate, Discord, Telegram, Slack, and other referenced names or services are not owned by the copyright holder unless explicitly stated.
+
+This software is provided "as is", without warranty of any kind. The copyright holder is not liable for any damages, data loss, server issues, security issues, downtime, lost revenue, broken installations, or other problems caused by installing, using, modifying, or relying on this software.
+
+Any use of this software outside the permissions listed above requires prior written permission from the copyright holder.

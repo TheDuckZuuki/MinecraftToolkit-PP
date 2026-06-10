@@ -1,19 +1,18 @@
 {
-    "id": "minecrafttoolkit",
-    "name": "MinecraftToolkit",
-    "author": "BlueWolf",
-    "version": "1.0.0",
-    "description": "Setups, Installs and Updates for Minecraft Server Versions Mods and Plugins",
-    "category": "plugin",
-    "url": "https://github.com/BlueDragon4251/MinecraftToolkit-PP",
-    "update_url": null,
-    "namespace": "BlueWolf\\MinecraftToolkit",
-    "class": "MinecraftToolkitPlugin",
-    "panels": null,
-    "panel_version": "^1.0.0-beta34",
-    "composer_packages": null,
-    "meta": {
-        "status": "enabled",
-        "status_message": null
-    }
+  "id": "minecrafttoolkit",
+  "name": "Minecraft Toolkit",
+  "author": "BlueWolf",
+  "version": "1.0.0",
+  "description": "Sets up Java and Bedrock Minecraft servers and safely manages Modrinth and CurseForge packages, Folia, crossplay, updates, and version changes.",
+  "category": "plugin",
+  "url": "https://github.com/BlueDragon4251/MinecraftToolkit-PP",
+  "update_url": null,
+  "namespace": "BlueWolf\\MinecraftToolkit",
+  "class": "MinecraftToolkitPlugin",
+  "panels": [
+    "admin",
+    "server"
+  ],
+  "panel_version": "^1.0.0-beta34",
+  "composer_packages": null
 }
