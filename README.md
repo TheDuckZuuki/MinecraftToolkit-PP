@@ -2,6 +2,12 @@
 
 Minecraft Toolkit is a Pelican Panel plugin for setting up and managing Minecraft servers directly from the server panel. It writes files through Wings, stores the selected software and installed packages per server, and blocks risky changes while the server is running.
 
+## Changelog
+
+See [`CHANGELOG.md`](./CHANGELOG.md) for version history and notable changes.
+
+Current pre-release version: `1.0.0`.
+
 ## License and usage rights
 
 Minecraft Toolkit is **source-available, not open source**. You may download and use the official plugin on your own Pelican Panel installation, but you may not redistribute it, reupload it, publish forks, publish modified versions, rename it, resell it, or release derivative versions.
