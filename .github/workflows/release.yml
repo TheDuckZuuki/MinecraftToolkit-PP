@@ -1,0 +1,154 @@
+name: Release to Main
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - developement
+    paths:
+      - 'plugin.json'
+      - 'src/**'
+      - 'lang/**'
+      - 'resources/**'
+      - 'routes/**'
+      - 'config/**'
+      - 'database/**'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout developement
+        uses: actions/checkout@v4
+        with:
+          ref: developement
+          fetch-depth: 0
+
+      - name: Extract version from plugin.json
+        id: version
+        run: |
+          VERSION=$(jq -r '.version' plugin.json)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Plugin version: $VERSION"
+
+      - name: Check if release already exists
+        id: check_release
+        run: |
+          TAG="v${{ steps.version.outputs.version }}"
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Copy plugin files
+        if: steps.check_release.outputs.exists == 'false'
+        run: |
+          mkdir -p /tmp/release
+          for path in \
+            plugin.json \
+            src \
+            lang \
+            resources \
+            routes \
+            config \
+            database \
+            phpstan.neon \
+            phpstan-baseline.neon \
+            pint.json \
+            CHANGELOG.md \
+            LICENSE \
+            README.md
+          do
+            if [ -e "$path" ]; then
+              cp -r "$path" /tmp/release/
+            fi
+          done
+
+      - name: Remove meta tag from plugin.json
+        if: steps.check_release.outputs.exists == 'false'
+        run: |
+          cd /tmp/release
+          jq 'del(.meta)' plugin.json > plugin_tmp.json && mv plugin_tmp.json plugin.json
+          echo "--- plugin.json after removing meta ---"
+          cat plugin.json
+
+      - name: Configure git
+        if: steps.check_release.outputs.exists == 'false'
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+
+      - name: Checkout main
+        if: steps.check_release.outputs.exists == 'false'
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main
+          fetch-depth: 0
+
+      - name: Update main branch
+        if: steps.check_release.outputs.exists == 'false'
+        run: |
+          cd main
+          rm -rf plugin.json src lang resources routes config database phpstan.neon phpstan-baseline.neon pint.json CHANGELOG.md LICENSE README.md
+          cp -r /tmp/release/* .
+          ls -la
+          echo "--- Updated files on main ---"
+
+      - name: Commit and push to main
+        if: steps.check_release.outputs.exists == 'false'
+        run: |
+          cd main
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Release v${{ steps.version.outputs.version }}"
+            git push origin main
+          fi
+
+      - name: Create zip file
+        if: steps.check_release.outputs.exists == 'false'
+        run: |
+          cd /tmp
+          mv release minecrafttoolkit
+          zip -r "/tmp/minecrafttoolkit-v${{ steps.version.outputs.version }}.zip" minecrafttoolkit
+          echo "ZIP created:"
+          ls -la "/tmp/minecrafttoolkit-v${{ steps.version.outputs.version }}.zip"
+          echo "--- ZIP contents ---"
+          zipinfo "/tmp/minecrafttoolkit-v${{ steps.version.outputs.version }}.zip" | head -30
+
+      - name: Extract changelog for release
+        if: steps.check_release.outputs.exists == 'false'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if [ -f /tmp/minecrafttoolkit/CHANGELOG.md ]; then
+            NOTES=$(awk "/^## \[${VERSION}\]/{found=1; next} /^## \[/{if(found) exit} found{print}" /tmp/minecrafttoolkit/CHANGELOG.md)
+          else
+            NOTES=""
+          fi
+          if [ -z "$NOTES" ]; then
+            NOTES="Release v${VERSION}"
+          fi
+          echo "$NOTES" > /tmp/release_notes.md
+          cat /tmp/release_notes.md
+
+      - name: Create GitHub Release
+        if: steps.check_release.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: "Minecraft Toolkit v${{ steps.version.outputs.version }}"
+          body_path: /tmp/release_notes.md
+          draft: false
+          prerelease: false
+          files: /tmp/minecrafttoolkit-v${{ steps.version.outputs.version }}.zip
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
