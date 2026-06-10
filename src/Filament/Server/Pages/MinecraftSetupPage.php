@@ -28,10 +28,12 @@ use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
+use Illuminate\Support\Facades\Blade;
 use Filament\Schemas\Components\Wizard;
 use Filament\Schemas\Components\Wizard\Step;
 use Filament\Schemas\Contracts\HasSchemas;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\HtmlString;
 use UnitEnum;
 
 /**
@@ -53,10 +55,24 @@ class MinecraftSetupPage extends Page implements HasSchemas
 
     public ?array $data = [];
 
+    /** @var array<int, array<string, mixed>> */
+    public array $setupPackageResults = [];
+
+    /** @var array<int, string> */
+    public array $selectedSetupPackageIds = [];
+
+    public int $setupPackagePage = 0;
+
+    public string $setupPackageQuery = '';
+
+    public string $setupPackageResultsTitle = '';
+
     public function mount(): void
     {
         $this->authorizeAccess();
         $this->form->fill($this->defaults());
+        $this->setupPackageResults = [];
+        $this->setupPackageResultsTitle = trans('minecrafttoolkit::strings.setup.package_browser_waiting');
     }
 
     public static function canAccess(): bool
@@ -120,6 +136,10 @@ class MinecraftSetupPage extends Page implements HasSchemas
                                 $set('minecraft_version', null);
                                 $set('loader_version', null);
                                 $set('crossplay_enabled', false);
+                                $set('setup_package_ids', []);
+                                $this->selectedSetupPackageIds = [];
+                                $this->setupPackagePage = 0;
+                                $this->resetSetupPackageBrowser();
                             })
                             ->required()
                             ->helperText(trans('minecrafttoolkit::strings.setup.software_help')),
@@ -134,7 +154,13 @@ class MinecraftSetupPage extends Page implements HasSchemas
                                 ->versionOptions((string) ($get('software') ?: 'vanilla')))
                             ->searchable()
                             ->live()
-                            ->afterStateUpdated(fn (Set $set) => $set('loader_version', null))
+                            ->afterStateUpdated(function (Set $set): void {
+                                $set('loader_version', null);
+                                $set('setup_package_ids', []);
+                                $this->selectedSetupPackageIds = [];
+                                $this->setupPackagePage = 0;
+                                $this->resetSetupPackageBrowser();
+                            })
                             ->required(),
                         Select::make('loader_version')
                             ->label(trans('minecrafttoolkit::strings.setup.loader_version'))
@@ -148,6 +174,11 @@ class MinecraftSetupPage extends Page implements HasSchemas
                                 true
                             ))
                             ->searchable()
+                            ->live()
+                            ->afterStateUpdated(function (): void {
+                                $this->setupPackagePage = 0;
+                                $this->resetSetupPackageBrowser();
+                            })
                             ->required(fn (Get $get): bool => in_array(
                                 $get('software'),
                                 ['fabric', 'forge', 'neoforge'],
@@ -264,25 +295,39 @@ class MinecraftSetupPage extends Page implements HasSchemas
                 Step::make('packages')
                     ->label(trans('minecrafttoolkit::strings.setup.packages'))
                     ->icon('tabler-packages')
-                    ->visible(fn (Get $get): bool => in_array($get('software'), ['paper', 'purpur', 'folia', 'fabric', 'forge', 'neoforge'], true))
+                    ->visible(fn (Get $get): bool => (string) ($get('minecraft_version') ?? '') !== ''
+                        && in_array($get('software'), ['paper', 'purpur', 'folia', 'fabric', 'forge', 'neoforge'], true))
                     ->schema([
                         Select::make('setup_package_source')
                             ->label(trans('minecrafttoolkit::strings.setup.source'))
                             ->options(fn (): array => $this->setupSourceOptions())
                             ->default('modrinth')
                             ->live()
-                            ->afterStateUpdated(fn (Set $set): mixed => $set('setup_package_ids', []))
+                            ->afterStateUpdated(function (Set $set): void {
+                                $set('setup_package_ids', []);
+                                $this->selectedSetupPackageIds = [];
+                                $this->setupPackagePage = 0;
+                                $this->resetSetupPackageBrowser();
+                            })
                             ->helperText(trans('minecrafttoolkit::strings.setup.packages_help')),
-                        Select::make('setup_package_ids')
-                            ->label(fn (Get $get): string => in_array($get('software'), ['paper', 'purpur', 'folia'], true) ? trans('minecrafttoolkit::strings.setup.select_plugins') : trans('minecrafttoolkit::strings.setup.select_mods'))
-                            ->multiple()
-                            ->searchable()
-                            ->options(fn (Get $get): array => $this->popularPackageOptions($get))
-                            ->getSearchResultsUsing(fn (string $search, Get $get): array => $this->searchPackageOptions($search, $get))
-                            ->helperText(trans('minecrafttoolkit::strings.setup.packages_multi_help')),
-                        Placeholder::make('package_warning')
-                            ->label(trans('minecrafttoolkit::strings.setup.hint'))
-                            ->content(trans('minecrafttoolkit::strings.setup.packages_multi_help')),
+                        TextInput::make('setup_package_query')
+                            ->label(trans('minecrafttoolkit::strings.installer.search', ['package' => trans('minecrafttoolkit::strings.setup.packages')]))
+                            ->placeholder(trans('minecrafttoolkit::strings.installer.project_placeholder'))
+                            ->live(onBlur: true)
+                            ->afterStateUpdated(function (?string $state, Set $set): void {
+                                $this->setupPackageQuery = trim((string) $state);
+                                $this->setupPackagePage = 0;
+                                $set('setup_package_ids', []);
+                                $this->selectedSetupPackageIds = [];
+                            })
+                            ->helperText(trans('minecrafttoolkit::strings.setup.package_browser_help')),
+                        Hidden::make('setup_package_ids')
+                            ->default([])
+                            ->dehydrated(true),
+                        Placeholder::make('setup_package_browser')
+                            ->label(trans('minecrafttoolkit::strings.setup.package_browser'))
+                            ->content(fn (Get $get): HtmlString => new HtmlString($this->renderSetupPackageBrowser($get)))
+                            ->columnSpanFull(),
                     ]),
                 Step::make('review')
                     ->label(trans('minecrafttoolkit::strings.setup.review'))
@@ -321,6 +366,7 @@ class MinecraftSetupPage extends Page implements HasSchemas
 
         try {
             $state = $this->form->getState();
+            $state['setup_package_ids'] = array_values(array_filter(array_map('strval', $state['setup_package_ids'] ?? $this->selectedSetupPackageIds)));
             $icon = $state['server_icon'] ?? null;
             $usesBootstrapInstaller = in_array($state['software'] ?? null, ['forge', 'neoforge', 'bedrock'], true);
             unset(
@@ -330,7 +376,8 @@ class MinecraftSetupPage extends Page implements HasSchemas
                 $state['motd_formatter_color'],
                 $state['motd_formatter_bold'],
                 $state['motd_formatter_italic'],
-                $state['motd_formatter_underlined']
+                $state['motd_formatter_underlined'],
+                $state['setup_package_query']
             );
 
             app(MinecraftSetupService::class)->setup($server, $state, $icon);
@@ -357,7 +404,7 @@ class MinecraftSetupPage extends Page implements HasSchemas
     private function defaults(): array
     {
         return [
-            'software' => 'paper',
+            'software' => null,
             'loader_version' => null,
             'motd' => 'A Minecraft Server',
             'level_name' => 'world',
@@ -384,6 +431,7 @@ class MinecraftSetupPage extends Page implements HasSchemas
             'motd_formatter_underlined' => false,
             'setup_package_source' => 'modrinth',
             'setup_package_ids' => [],
+            'setup_package_query' => '',
         ];
     }
 
@@ -440,7 +488,7 @@ class MinecraftSetupPage extends Page implements HasSchemas
         if ((bool) config('minecrafttoolkit.modrinth_enabled', true)) {
             $options['modrinth'] = 'Modrinth';
         }
-        if ((bool) config('minecrafttoolkit.curseforge_enabled', true) && app(CurseForgeService::class)->isConfigured()) {
+        if ((bool) config('minecrafttoolkit.curseforge_enabled', false) && app(CurseForgeService::class)->isConfigured()) {
             $options['curseforge'] = 'CurseForge';
         }
 
@@ -503,6 +551,143 @@ class MinecraftSetupPage extends Page implements HasSchemas
                     . (isset($result['downloads']) ? ' · ' . number_format((int) $result['downloads']) . ' Downloads' : ''),
             ])
             ->all();
+    }
+
+
+
+    private function renderSetupPackageBrowser(Get $get): string
+    {
+        if (!$this->canShowSetupPackageBrowser($get)) {
+            return '<p class="text-sm text-gray-500">' . e(trans('minecrafttoolkit::strings.setup.package_browser_waiting')) . '</p>';
+        }
+
+        $this->data['software'] = (string) ($get('software') ?? $this->data['software'] ?? '');
+        $this->data['minecraft_version'] = (string) ($get('minecraft_version') ?? $this->data['minecraft_version'] ?? '');
+        $this->data['loader_version'] = $get('loader_version') ?? ($this->data['loader_version'] ?? null);
+        $this->data['setup_package_source'] = (string) ($get('setup_package_source') ?: ($this->data['setup_package_source'] ?? 'modrinth'));
+        $this->data['setup_package_query'] = (string) ($get('setup_package_query') ?? $this->data['setup_package_query'] ?? '');
+        $this->data['setup_package_ids'] = $this->selectedSetupPackageIds;
+
+        return view('minecrafttoolkit::filament.server.pages.partials.setup-package-browser', [
+            'page' => $this,
+        ])->render();
+    }
+
+
+    public function resetSetupPackageBrowser(): void
+    {
+        $this->setupPackageResults = [];
+        $this->setupPackageResultsTitle = trans('minecrafttoolkit::strings.setup.package_browser_waiting');
+    }
+
+    private function canShowSetupPackageBrowser(Get $get): bool
+    {
+        $software = (string) ($get('software') ?? '');
+        $version = (string) ($get('minecraft_version') ?? '');
+
+        return $software !== ''
+            && $version !== ''
+            && in_array($software, ['paper', 'purpur', 'folia', 'fabric', 'forge', 'neoforge'], true);
+    }
+
+    public function refreshSetupPackageBrowser(): void
+    {
+        $this->loadSetupPackages(trim($this->setupPackageQuery) === '');
+    }
+
+    public function searchSetupPackages(): void
+    {
+        $this->setupPackageQuery = trim((string) ($this->data['setup_package_query'] ?? $this->setupPackageQuery));
+        $this->setupPackagePage = 0;
+        $this->loadSetupPackages($this->setupPackageQuery === '');
+    }
+
+    public function showPopularSetupPackages(): void
+    {
+        $this->setupPackageQuery = '';
+        $this->data['setup_package_query'] = '';
+        $this->setupPackagePage = 0;
+        $this->loadSetupPackages(true);
+    }
+
+    public function nextSetupPackagePage(): void
+    {
+        $this->setupPackagePage++;
+        $this->loadSetupPackages(trim($this->setupPackageQuery) === '');
+    }
+
+    public function previousSetupPackagePage(): void
+    {
+        $this->setupPackagePage = max(0, $this->setupPackagePage - 1);
+        $this->loadSetupPackages(trim($this->setupPackageQuery) === '');
+    }
+
+    public function toggleSetupPackage(string $sourceProjectId): void
+    {
+        if (in_array($sourceProjectId, $this->selectedSetupPackageIds, true)) {
+            $this->selectedSetupPackageIds = array_values(array_filter(
+                $this->selectedSetupPackageIds,
+                fn (string $id): bool => $id !== $sourceProjectId
+            ));
+        } else {
+            $this->selectedSetupPackageIds[] = $sourceProjectId;
+        }
+
+        $this->data['setup_package_ids'] = $this->selectedSetupPackageIds;
+    }
+
+    public function setupPackageSelected(string $sourceProjectId): bool
+    {
+        return in_array($sourceProjectId, $this->selectedSetupPackageIds, true);
+    }
+
+    private function loadSetupPackages(bool $popular = false): void
+    {
+        try {
+            $software = (string) ($this->data['software'] ?? '');
+            $minecraftVersion = (string) ($this->data['minecraft_version'] ?? '');
+            if ($software === '' || $minecraftVersion === ''
+                || !in_array($software, ['paper', 'purpur', 'folia', 'fabric', 'forge', 'neoforge'], true)) {
+                $this->setupPackageResults = [];
+                $this->setupPackageResultsTitle = trans('minecrafttoolkit::strings.setup.package_browser_waiting');
+                return;
+            }
+
+            $source = (string) ($this->data['setup_package_source'] ?? 'modrinth');
+            if ($source === 'curseforge' && !app(CurseForgeService::class)->isConfigured()) {
+                $this->setupPackageResults = [];
+                $this->setupPackageResultsTitle = trans('minecrafttoolkit::strings.installer.missing_proxy');
+                return;
+            }
+
+            $query = trim($this->setupPackageQuery);
+            $offset = $this->setupPackagePage * 20;
+            $setup = new MinecraftToolkitSetup([
+                'server_uuid' => 'setup-preview',
+                'software' => $software,
+                'minecraft_version' => $minecraftVersion,
+                'loader' => in_array($software, ['fabric', 'forge', 'neoforge'], true) ? $software : null,
+                'loader_version' => $this->data['loader_version'] ?? null,
+                'setup_status' => 'preview',
+            ]);
+
+            $this->setupPackageResultsTitle = ($popular || $query === '')
+                ? trans('minecrafttoolkit::strings.installer.featured')
+                : 'Search: “' . $query . '”';
+
+            $this->setupPackageResults = match ($source) {
+                'modrinth' => ($popular || $query === '')
+                    ? app(ModrinthService::class)->popularPackages($setup, $offset)
+                    : app(ModrinthService::class)->searchPackages($query, $setup),
+                'curseforge' => ($popular || $query === '')
+                    ? app(CurseForgeService::class)->popularPackages($setup, $offset)
+                    : app(CurseForgeService::class)->searchPackages($query, $setup),
+                default => [],
+            };
+        } catch (\Throwable) {
+            $this->setupPackageResults = [];
+            $this->setupPackageResultsTitle = trans('minecrafttoolkit::strings.installer.none_found', ['packages' => trans('minecrafttoolkit::strings.setup.packages')]);
+        }
     }
 
     /** @return array<int, string> */

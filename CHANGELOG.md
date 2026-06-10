@@ -6,12 +6,20 @@ The changelog is maintained under the current release version. New changes are a
 
 This project is source-available, not open source. See [`LICENSE`](./LICENSE) for usage rights.
 
-## [1.0.0]
+## [1.2.0] - Unreleased
 
-### Notice
-- Curseforge is unavailable for now unless you have you're own API key then you can set it in the Settings of this plugin
+### Note 
+
+- Temporarily disabled CurseForge by default for public builds; administrators can still enable it with a private proxy or a private direct API key.
+- Removed the default active CurseForge proxy URL and proxy secret from runtime configuration so normal installs only use Modrinth unless CurseForge is explicitly configured.
 
 ### Added
+
+- Added paged `server.properties` editing in Minecraft Settings, including standard Java properties plus a full raw editor for unknown or newer values.
+- Added a Java class-version safety check for downloaded JAR files. Public builds default to Java 21 / class version 65 and reject newer JARs before writing them to the server.
+
+- Added updater action to install missing required dependencies after the server has already been set up.
+- Added updater action to remove managed plugins/mods safely by backing up the file and disabling package management.
 
 - Added initial Pelican plugin structure for Minecraft Toolkit.
 - Added server navigation pages for setup, overview, installer, updater, settings, and version changes.
@@ -37,8 +45,6 @@ This project is source-available, not open source. See [`LICENSE`](./LICENSE) fo
 - Added CurseForge package source support through the BlueIT/Vercel proxy flow.
 - Added optional direct CurseForge API key fallback for private/self-hosted installations.
 - Added CurseForge disabled mode when neither proxy nor private key is available.
-- Added default CurseForge proxy URL for the BlueIT Vercel proxy.
-- Added default proxy token support so normal users do not need to configure a CurseForge API key for the official proxy flow.
 - Added default popular package listing in the installer, so users do not need to search before seeing compatible packages.
 - Added pagination for package browsing.
 - Added package source, project ID, version ID, file name, target path, dependency, and managed-state tracking.
@@ -57,22 +63,57 @@ This project is source-available, not open source. See [`LICENSE`](./LICENSE) fo
 - Added German and English language files for plugin-owned UI strings.
 - Added locale fallback logic: German is used when the active locale starts with `de`; every other locale falls back to English.
 - Added translated labels for navigation, setup, installer, updater, settings, package sources, server software, status messages, and common actions where the text is controlled by this plugin.
+- Added this `CHANGELOG.md` file.
 
 ### Changed
+
+- Changed the setup Mods/Plugins step back to the same card-style package browser used by the installer, without rendering it outside the Mods/Plugins wizard step.
+- Changed Geyser configuration patching to update the modern `java.auth-type` and `motd` sections instead of only adding legacy/unused keys.
+
+- Temporarily disabled CurseForge by default for public builds; administrators can still enable it with a private proxy or a private direct API key.
+- Removed the default active CurseForge proxy URL and proxy secret from runtime configuration so normal installs only use Modrinth unless CurseForge is explicitly configured.
+- Changed the setup wizard defaults so no server software is preselected before the user chooses one.
 
 - Marked the plugin as source-available, not open source.
 - Clarified that redistribution, rebranding, public forks, modified public releases, and resale are not allowed without permission.
 - Moved the intended public CurseForge flow to a backend proxy so the real API key is not exposed in the plugin source.
 - Removed the requirement that every normal plugin user must request their own CurseForge API key.
-- Clarified in the README that the bundled proxy token is not a private CurseForge API key.
-- Clarified that the actual CurseForge API key must stay on the proxy backend.
 - Added Folia to the supported software table in the README.
 - Updated README with setup package installation, popular package browsing, MOTD formatter, crossplay behavior, language behavior, installation notes, and changelog reference.
 - Kept the plugin language handling isolated to Minecraft Toolkit and did not change the global Pelican locale.
-- Kept the plugin version at `1.0.0` because the plugin has not been publicly released yet.
+- Set the plugin version to `1.2.0` as requested for the next package build.
 
 ### Fixed
+
+- Fixed setup package selection showing as an old dropdown instead of the installer-style package browser.
+- Fixed setup installs accepting plugin JARs that require a newer Java runtime than the configured server Java version can load.
+- Fixed Geyser MOTD/auth patching leaving `motd.primary-motd`, `motd.secondary-motd`, `motd.passthrough-motd`, and `java.auth-type` unchanged.
+
+- Fixed setup package selection by replacing the embedded Livewire package-browser partial inside the wizard with a stable Filament multi-select field, preventing `AnonymousComponent::setupPackageSelected()` 500 errors during Modrinth loading.
+- Fixed setup package selection rendering before software selection by removing the custom package-browser view from the setup wizard render path.
+
+- Fixed the setup package browser appearing before a server software was selected by starting the setup wizard with no preselected software.
+- Reduced setup wizard Livewire side effects by no longer auto-loading package browser results during software/version/loader field updates.
+
+- Fixed updater/install candidate handling so the exact candidate from the last update check is stored and reused during the actual update instead of resolving a possibly different file later.
+- Fixed Modrinth update candidate ordering by sorting compatible versions by publish date before selecting the latest release.
+- Fixed CurseForge update candidate ordering by sorting compatible files by file date and file ID before selecting the latest release.
+- Added downloaded-JAR metadata verification so updates/installations abort if the JAR itself reports an older or different plugin version than the selected candidate.
+- Added update candidate metadata storage to update checks so the UI check and the update action use the same version ID, filename, download URL, hashes, and dependency data.
+
+- Fixed package updates that appeared successful but were detected again afterwards because stale `logs/latest.log` data overwrote the freshly updated database version.
+- Fixed Geyser/Floodgate update checks so runtime versions like `2.10.0` no longer downgrade stored build versions like `2.10.0+1162`.
+- Added post-download verification so an update only succeeds when the new JAR exists and the old target file was removed or backed up.
 
 - Fixed Crossplay configuration patching so Geyser `auth-type` is set to `floodgate` more reliably.
 - Fixed Crossplay configuration patching so Geyser Bedrock port and MOTD values are written together.
 - Fixed Installer behavior so compatible packages can be shown before a search query is entered.
+- Fixed setup package browsing so the setup page uses the same card-style popular/search list behavior as the installer instead of only a compact multi-select dropdown.
+- Fixed package result card image sizing by applying hard width/height limits so large external icons cannot stretch the package list layout.
+- Fixed package installation so required dependencies reported by Modrinth or CurseForge are installed automatically before the selected package.
+- Added a known dependency rule for ViaRewind so ViaBackwards is treated as required even when source metadata is incomplete.
+- Fixed updater checks so package records are synchronized with the actually loaded plugin version from `logs/latest.log` before checking for updates.
+- Fixed updater checks so a database version mismatch against the real installed plugin version no longer reports a package as current.
+- Added detection of recent plugin load failures from `logs/latest.log`, including missing plugin dependencies and Java class-version incompatibilities.
+- Fixed updater status handling so runtime-incompatible packages are reported as errors instead of `up to date`.
+- Fixed setup package browser placement so the package browser only appears inside the Mods/Plugins wizard step instead of below every setup step.

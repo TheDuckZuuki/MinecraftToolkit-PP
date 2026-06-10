@@ -12,7 +12,11 @@
                         <div class="mt-1 text-sm text-gray-500">{{ ucfirst($package['source']) }} · {{ trans('minecrafttoolkit::strings.updater.installed') }}: {{ $package['current_version'] ?: trans('minecrafttoolkit::strings.updater.unknown') }} @if ($package['status'] === 'update_available') · {{ trans('minecrafttoolkit::strings.updater.available') }}: {{ $package['new_version'] }} @endif</div>
                         <div class="mt-1 text-sm">@switch($package['status'])@case('up_to_date')<span class="text-success-600">{{ trans('minecrafttoolkit::strings.updater.up_to_date') }}</span>@break @case('update_available')<span class="text-warning-600">{{ trans('minecrafttoolkit::strings.updater.update_available') }}</span>@break @case('error')<span class="text-danger-600">{{ $package['message'] }}</span>@break @default<span class="text-gray-500">{{ trans('minecrafttoolkit::strings.updater.not_checked') }}</span>@endswitch @if ($package['checked_at'])<span class="text-xs text-gray-500"> · {{ $package['checked_at'] }}</span>@endif</div>
                     </div>
-                    @if ($package['status'] === 'update_available')<x-filament::button size="sm" wire:click="updatePackage({{ $package['id'] }})" wire:loading.attr="disabled">{{ trans('minecrafttoolkit::strings.updater.update') }}</x-filament::button>@endif
+                    <div class="flex flex-wrap gap-2 md:justify-end">
+                        @if ($package['status'] === 'update_available')<x-filament::button size="sm" wire:click="updatePackage({{ $package['id'] }})" wire:loading.attr="disabled">{{ trans('minecrafttoolkit::strings.updater.update') }}</x-filament::button>@endif
+                        @if ($package['can_install_dependencies'])<x-filament::button size="sm" color="info" wire:click="installDependencies({{ $package['id'] }})" wire:loading.attr="disabled">{{ trans('minecrafttoolkit::strings.updater.install_dependencies') }}</x-filament::button>@endif
+                        @if ($package['can_delete'])<x-filament::button size="sm" color="danger" wire:click="deletePackage({{ $package['id'] }})" wire:confirm="{{ trans('minecrafttoolkit::strings.updater.delete_confirm') }}" wire:loading.attr="disabled">{{ trans('minecrafttoolkit::strings.updater.delete') }}</x-filament::button>@endif
+                    </div>
                 </div>
             @empty
                 <p class="text-sm text-gray-500">{{ trans('minecrafttoolkit::strings.updater.empty') }}</p>

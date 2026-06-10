@@ -81,6 +81,24 @@ class MinecraftPropertiesService
 ";
     }
 
+
+    /** @return array<string, string> */
+    public function parse(string $contents): array
+    {
+        $properties = [];
+        foreach (preg_split('/\R/', $contents) ?: [] as $line) {
+            $line = trim($line);
+            if ($line === '' || str_starts_with($line, '#') || !str_contains($line, '=')) {
+                continue;
+            }
+
+            [$key, $value] = explode('=', $line, 2);
+            $properties[trim($key)] = trim($value);
+        }
+
+        return $properties;
+    }
+
     /** @param array<string, mixed> $changes */
     public function patch(string $contents, array $changes): string
     {

@@ -51,7 +51,7 @@ class MinecraftToolkitPlugin implements HasPluginSettings, Plugin
                 ->default((bool) config('minecrafttoolkit.modrinth_enabled', true)),
             Toggle::make('curseforge_enabled')
                 ->label(trans('minecrafttoolkit::strings.settings.curseforge_enabled'))
-                ->default((bool) config('minecrafttoolkit.curseforge_enabled', true))
+                ->default((bool) config('minecrafttoolkit.curseforge_enabled', false))
                 ->helperText(trans('minecrafttoolkit::strings.settings.curseforge_enabled_help')),
             Placeholder::make('curseforge_key_status')
                 ->label(trans('minecrafttoolkit::strings.settings.curseforge_key_status'))
@@ -114,7 +114,7 @@ class MinecraftToolkitPlugin implements HasPluginSettings, Plugin
             'MINECRAFT_TOOLKIT_ADMINS_ONLY' => (bool) ($data['admins_only'] ?? false),
             'MINECRAFT_TOOLKIT_BACKUP_BEFORE_OVERWRITE' => (bool) ($data['backup_before_overwrite'] ?? true),
             'MINECRAFT_TOOLKIT_MODRINTH_ENABLED' => (bool) ($data['modrinth_enabled'] ?? true),
-            'MINECRAFT_TOOLKIT_CURSEFORGE_ENABLED' => (bool) ($data['curseforge_enabled'] ?? true),
+            'MINECRAFT_TOOLKIT_CURSEFORGE_ENABLED' => (bool) ($data['curseforge_enabled'] ?? false),
             'MINECRAFT_TOOLKIT_CURSEFORGE_PROXY_URL' => rtrim(trim((string) ($data['curseforge_proxy_url'] ?? '')), '/'),
             'MINECRAFT_TOOLKIT_CURSEFORGE_PROXY_SECRET' => trim((string) ($data['curseforge_proxy_secret'] ?? '')),
             'MINECRAFT_TOOLKIT_CURSEFORGE_API_KEY' => trim((string) ($data['curseforge_api_key'] ?? '')),

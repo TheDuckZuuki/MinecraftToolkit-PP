@@ -25,7 +25,7 @@
             <div class="space-y-5">
                 <div class="flex items-start gap-4">
                     @if ($candidate['project']['icon_url'])
-                        <img src="{{ $candidate['project']['icon_url'] }}" alt="" class="h-16 w-16 rounded-lg object-cover">
+                        <img src="{{ $candidate['project']['icon_url'] }}" alt="" style="width: 64px; height: 64px; min-width: 64px; max-width: 64px; object-fit: cover; border-radius: 0.5rem;">
                     @endif
                     <div>
                         <h3 class="text-lg font-semibold">{{ $candidate['project']['title'] }}</h3>
@@ -83,15 +83,15 @@
         <x-filament::section :heading="$resultsTitle">
             <div class="grid gap-4 lg:grid-cols-2">
                 @foreach ($results as $result)
-                    <div class="flex gap-4 rounded-xl border border-gray-200 p-4 dark:border-white/10">
+                    <div class="flex min-h-[96px] gap-4 rounded-xl border border-gray-200 p-4 dark:border-white/10">
                         @if ($result['icon_url'])
-                            <img src="{{ $result['icon_url'] }}" alt="" class="h-14 w-14 rounded-lg object-cover">
+                            <img src="{{ $result['icon_url'] }}" alt="" style="width: 56px; height: 56px; min-width: 56px; max-width: 56px; object-fit: cover; border-radius: 0.5rem;">
                         @endif
                         <div class="min-w-0 flex-1">
                             <div class="flex items-start justify-between gap-3">
-                                <div>
-                                    <h3 class="font-semibold">{{ $result['title'] }}</h3>
-                                    <p class="text-xs text-gray-500">{{ $result['author'] }} · {{ number_format($result['downloads']) }} {{ trans('minecrafttoolkit::strings.installer.downloads') }}</p>
+                                <div class="min-w-0">
+                                    <h3 class="truncate font-semibold">{{ $result['title'] }}</h3>
+                                    <p class="truncate text-xs text-gray-500">{{ $result['author'] }} · {{ number_format($result['downloads']) }} {{ trans('minecrafttoolkit::strings.installer.downloads') }}</p>
                                 </div>
                                 <x-filament::button size="sm" wire:click="selectProject('{{ $result['project_id'] }}')" wire:loading.attr="disabled">
                                     {{ trans('minecrafttoolkit::strings.installer.check') }}

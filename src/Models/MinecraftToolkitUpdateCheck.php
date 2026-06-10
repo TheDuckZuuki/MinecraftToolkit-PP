@@ -15,7 +15,10 @@ class MinecraftToolkitUpdateCheck extends Model
 
     protected function casts(): array
     {
-        return ['checked_at' => 'datetime'];
+        return [
+            'checked_at' => 'datetime',
+            'candidate_json' => 'array',
+        ];
     }
 
     public function package(): BelongsTo

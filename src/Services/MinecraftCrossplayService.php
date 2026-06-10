@@ -103,10 +103,12 @@ class MinecraftCrossplayService
         $yaml = $this->patchYamlSectionValue($yaml, 'bedrock', 'address', '0.0.0.0');
         $yaml = $this->patchYamlSectionValue($yaml, 'bedrock', 'clone-remote-port', 'false');
         if ($motd !== '') {
-            $yaml = $this->patchYamlSectionValue($yaml, 'bedrock', 'motd1', $this->quoteYamlValue($motd));
-            $yaml = $this->patchYamlSectionValue($yaml, 'bedrock', 'motd2', $this->quoteYamlValue('Minecraft Toolkit'));
+            $yaml = $this->patchYamlSectionValue($yaml, 'motd', 'primary-motd', $this->quoteYamlValue($motd));
+            $yaml = $this->patchYamlSectionValue($yaml, 'motd', 'secondary-motd', $this->quoteYamlValue('Minecraft Toolkit'));
+            $yaml = $this->patchYamlSectionValue($yaml, 'motd', 'passthrough-motd', 'false');
         }
 
+        $yaml = $this->patchYamlSectionValue($yaml, 'java', 'auth-type', 'floodgate');
         $yaml = $this->patchYamlSectionValue($yaml, 'remote', 'auth-type', 'floodgate');
         $yaml = $this->forceAuthTypeFloodgate($yaml);
 

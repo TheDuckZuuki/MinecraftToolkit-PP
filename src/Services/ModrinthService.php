@@ -79,6 +79,10 @@ class ModrinthService
         }
 
         $versions = $this->versions($projectId, $setup);
+        usort($versions, fn (array $a, array $b): int => strcmp(
+            (string) ($b['date_published'] ?? ''),
+            (string) ($a['date_published'] ?? '')
+        ));
         $version = collect($versions)->firstWhere('version_type', 'release') ?? ($versions[0] ?? null);
         if (!is_array($version)) {
             throw new MinecraftToolkitException('Keine kompatible Paketversion wurde gefunden.');
@@ -94,11 +98,14 @@ class ModrinthService
         }
 
         $version['selected_file'] = $file;
+        $normalizedProject = $this->normalizeProject($project);
+        $dependencies = $this->dependencyDetails($version);
+        $dependencies = $this->withKnownPluginDependencies($normalizedProject, $dependencies);
 
         return [
-            'project' => $this->normalizeProject($project),
+            'project' => $normalizedProject,
             'version' => $version,
-            'dependencies' => $this->dependencyDetails($version),
+            'dependencies' => $dependencies,
             'warning' => $setup->software === 'folia'
                 ? 'Folia ist nicht automatisch mit jedem Paper-Plugin kompatibel. Prüfe die Projektbeschreibung, bevor du produktive Server migrierst.'
                 : null,
@@ -228,6 +235,40 @@ class ModrinthService
             })
             ->values()
             ->all();
+    }
+
+
+    /** @param array<string, mixed> $project
+     *  @param array<int, array<string, mixed>> $dependencies
+     *  @return array<int, array<string, mixed>>
+     */
+    private function withKnownPluginDependencies(array $project, array $dependencies): array
+    {
+        $slug = strtolower((string) ($project['slug'] ?? ''));
+        $title = strtolower((string) ($project['title'] ?? ''));
+        $known = [];
+
+        if ($slug === 'viarewind' || str_contains($title, 'viarewind')) {
+            $known[] = [
+                'project_id' => 'viabackwards',
+                'version_id' => null,
+                'type' => 'required',
+                'title' => 'ViaBackwards',
+                'slug' => 'viabackwards',
+            ];
+        }
+
+        foreach ($known as $dependency) {
+            $exists = collect($dependencies)->contains(fn (array $existing): bool =>
+                ($existing['project_id'] ?? null) === $dependency['project_id']
+                || ($existing['slug'] ?? null) === $dependency['slug']
+            );
+            if (!$exists) {
+                $dependencies[] = $dependency;
+            }
+        }
+
+        return $dependencies;
     }
 
     /** @return array<string, mixed> */

@@ -45,8 +45,31 @@ class MinecraftPackageInstaller
         MinecraftToolkitSetup $setup,
         string $source,
         string $projectId
-    ): MinecraftToolkitPackage
-    {
+    ): MinecraftToolkitPackage {
+        /** @var Lock $lock */
+        $lock = Cache::lock("minecrafttoolkit.install.{$server->uuid}", 600);
+        if (!$lock->get()) {
+            throw new MinecraftToolkitException('Für diesen Server läuft bereits eine Paketinstallation.');
+        }
+
+        try {
+            $this->state->assertOffline($server);
+
+            return $this->performInstall($server, $setup, $source, $projectId, false, []);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /** @param string[] $stack */
+    private function performInstall(
+        Server $server,
+        MinecraftToolkitSetup $setup,
+        string $source,
+        string $projectId,
+        bool $requiredDependency,
+        array $stack
+    ): MinecraftToolkitPackage {
         $packageType = match ($setup->software) {
             'paper', 'purpur', 'folia' => 'plugin',
             'fabric', 'forge', 'neoforge' => 'mod',
@@ -61,28 +84,44 @@ class MinecraftPackageInstaller
             throw new MinecraftToolkitException('Für diesen Mod-Server ist keine Loader-Version gespeichert.');
         }
 
-        if (MinecraftToolkitPackage::query()
+        $alreadyInstalled = MinecraftToolkitPackage::query()
             ->where('server_uuid', $server->uuid)
             ->where('source', $source)
             ->where('source_project_id', $projectId)
             ->where('managed', true)
-            ->exists()) {
+            ->first();
+        if ($alreadyInstalled instanceof MinecraftToolkitPackage) {
+            if ($requiredDependency) {
+                return $alreadyInstalled;
+            }
+
             throw new MinecraftToolkitException("Dieses $packageLabel wird bereits von Minecraft Toolkit verwaltet.");
         }
 
-        /** @var Lock $lock */
-        $lock = Cache::lock("minecrafttoolkit.install.{$server->uuid}", 600);
-        if (!$lock->get()) {
-            throw new MinecraftToolkitException('Für diesen Server läuft bereits eine Paketinstallation.');
+        $stackKey = "$source:$projectId";
+        if (in_array($stackKey, $stack, true)) {
+            throw new MinecraftToolkitException('Eine Paketabhängigkeit verweist rekursiv auf sich selbst.');
         }
+        $stack[] = $stackKey;
 
         try {
-            $this->state->assertOffline($server);
             $candidate = match ($source) {
                 'modrinth' => $this->modrinth->installationCandidate($projectId, $setup),
                 'curseforge' => $this->curseForge->installationCandidate($projectId, $setup),
                 default => throw new MinecraftToolkitException('Die Paketquelle wird nicht unterstützt.'),
             };
+
+            foreach ($this->requiredDependencies($candidate['dependencies'] ?? []) as $dependency) {
+                $dependencyProjectId = $dependency['project_id'] ?? null;
+                if (!is_string($dependencyProjectId) || $dependencyProjectId === '') {
+                    throw new MinecraftToolkitException(
+                        "Eine Pflicht-Abhängigkeit für $projectId konnte nicht eindeutig aufgelöst werden."
+                    );
+                }
+
+                $this->performInstall($server, $setup, $source, $dependencyProjectId, true, $stack);
+            }
+
             $project = $candidate['project'];
             $version = $candidate['version'];
             $file = $version['selected_file'];
@@ -93,12 +132,13 @@ class MinecraftPackageInstaller
                 throw new MinecraftToolkitException("Die Datei $fileName existiert bereits im $targetDirectory-Ordner.");
             }
 
-            $this->files->downloadJar(
+            $metadata = $this->files->downloadJarWithMetadata(
                 $server,
                 (string) $file['url'],
                 $path,
                 is_array($file['hashes'] ?? null) ? $file['hashes'] : []
             );
+            $this->assertDownloadedVersionMatchesCandidate($metadata['plugin_version'] ?? null, (string) ($version['version_number'] ?? $version['name'] ?? ''));
 
             $package = MinecraftToolkitPackage::query()->create([
                 'server_uuid' => $server->uuid,
@@ -109,18 +149,18 @@ class MinecraftPackageInstaller
                 'source_version_id' => $version['id'],
                 'project_name' => $project['title'],
                 'project_type' => $packageType,
-                'package_type' => $packageType,
+                'package_type' => $requiredDependency ? 'dependency' : $packageType,
                 'loader' => $setup->software,
                 'minecraft_version' => $setup->minecraft_version,
                 'version_number' => $version['version_number'] ?? $version['name'] ?? null,
                 'file_name' => $fileName,
                 'file_path' => $path,
                 'download_url' => $file['url'],
-                'sha1' => $file['hashes']['sha1'] ?? null,
-                'sha512' => $file['hashes']['sha512'] ?? null,
+                'sha1' => $metadata['sha1'] ?? ($file['hashes']['sha1'] ?? null),
+                'sha512' => $metadata['sha512'] ?? ($file['hashes']['sha512'] ?? null),
                 'side' => $project['server_side'],
                 'dependencies_json' => $candidate['dependencies'],
-                'is_required_dependency' => false,
+                'is_required_dependency' => $requiredDependency,
                 'is_system_package' => false,
                 'managed' => true,
                 'enabled' => true,
@@ -132,6 +172,7 @@ class MinecraftPackageInstaller
                 'project_id' => $project['project_id'],
                 'version_id' => $version['id'],
                 'file' => $fileName,
+                'required_dependency' => $requiredDependency,
             ]);
 
             return $package;
@@ -143,13 +184,56 @@ class MinecraftPackageInstaller
             Log::error('Minecraft Toolkit package installation failed', [
                 'server_uuid' => $server->uuid,
                 'project_id' => $projectId,
+                'source' => $source,
                 'exception' => $exception,
             ]);
 
             throw new MinecraftToolkitException($message, previous: $exception);
-        } finally {
-            $lock->release();
         }
+    }
+
+
+    private function assertDownloadedVersionMatchesCandidate(?string $downloadedVersion, string $expectedVersion): void
+    {
+        $downloadedVersion = trim((string) $downloadedVersion);
+        $expectedVersion = trim($expectedVersion);
+        if ($downloadedVersion === '' || $expectedVersion === '') {
+            return;
+        }
+
+        if ($this->versionBase($downloadedVersion) !== $this->versionBase($expectedVersion)) {
+            throw new MinecraftToolkitException(
+                "Die heruntergeladene Datei enthält Version $downloadedVersion, erwartet wurde aber $expectedVersion. Die Installation wurde abgebrochen, weil die Quelle eine falsche/alte Datei geliefert hat."
+            );
+        }
+    }
+
+    private function versionBase(string $version): string
+    {
+        $version = trim($version);
+        $version = preg_replace('/^v/i', '', $version) ?? $version;
+        $version = preg_replace('/\+.*$/', '', $version) ?? $version;
+        $version = preg_replace('/-SNAPSHOT.*$/', '', $version) ?? $version;
+        $version = preg_replace('/^(?:bukkit|spigot|paper|fabric|forge|neoforge)-/i', '', $version) ?? $version;
+
+        return trim($version);
+    }
+
+    /** @param mixed $dependencies
+     *  @return array<int, array<string, mixed>>
+     */
+    private function requiredDependencies(mixed $dependencies): array
+    {
+        if (!is_array($dependencies)) {
+            return [];
+        }
+
+        return collect($dependencies)
+            ->filter(fn (mixed $dependency): bool => is_array($dependency)
+                && ($dependency['type'] ?? null) === 'required'
+                && is_string($dependency['project_id'] ?? null))
+            ->values()
+            ->all();
     }
 
     public function safeFileName(string $fileName): string

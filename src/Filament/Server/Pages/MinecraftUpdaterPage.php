@@ -122,6 +122,49 @@ class MinecraftUpdaterPage extends Page
         }
     }
 
+
+    public function installDependencies(int $packageId): void
+    {
+        try {
+            $result = app(MinecraftUpdateService::class)
+                ->installMissingDependencies($this->server(), $this->setup(), $packageId);
+            Notification::make()
+                ->title(trans('minecrafttoolkit::strings.updater.dependencies_installed'))
+                ->body("Installiert: {$result['installed']}, übersprungen: {$result['skipped']}, Fehler: " . count($result['errors']))
+                ->status(count($result['errors']) > 0 ? 'warning' : 'success')
+                ->persistent(count($result['errors']) > 0)
+                ->send();
+            $this->refreshPackages();
+        } catch (MinecraftToolkitException $exception) {
+            $this->notifyError('Dependency-Installation fehlgeschlagen', $exception);
+            $this->refreshPackages();
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->notifyUnexpectedError('Dependency-Installation fehlgeschlagen');
+            $this->refreshPackages();
+        }
+    }
+
+    public function deletePackage(int $packageId): void
+    {
+        try {
+            app(MinecraftUpdateService::class)->deletePackage($this->server(), $packageId);
+            Notification::make()
+                ->title(trans('minecrafttoolkit::strings.updater.package_deleted'))
+                ->body(trans('minecrafttoolkit::strings.updater.package_deleted_body'))
+                ->warning()
+                ->send();
+            $this->refreshPackages();
+        } catch (MinecraftToolkitException $exception) {
+            $this->notifyError('Paket konnte nicht gelöscht werden', $exception);
+            $this->refreshPackages();
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->notifyUnexpectedError('Paket konnte nicht gelöscht werden');
+            $this->refreshPackages();
+        }
+    }
+
     public function updateAll(): void
     {
         try {
@@ -167,6 +210,11 @@ class MinecraftUpdaterPage extends Page
                     'message' => $check?->message,
                     'checked_at' => $check?->checked_at?->diffForHumans(),
                     'system' => $package->is_system_package,
+                    'can_install_dependencies' => $check?->status === 'error'
+                        && is_string($check?->message)
+                        && (str_contains($check->message, 'Pflicht-Abhängigkeiten')
+                            || str_contains($check->message, 'Fehlende Plugin-Abhängigkeit')),
+                    'can_delete' => !$package->is_system_package,
                 ];
             })
             ->all();

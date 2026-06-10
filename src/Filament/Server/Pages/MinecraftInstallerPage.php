@@ -259,18 +259,10 @@ class MinecraftInstallerPage extends Page implements HasSchemas
                 default => throw new MinecraftToolkitException(trans('minecrafttoolkit::strings.installer.invalid_source')),
             };
 
-            $requiredMissing = collect($this->candidate['dependencies'] ?? [])
-                ->where('type', 'required')
-                ->where('installed', false)
-                ->count();
-
             Notification::make()
                 ->title(trans('minecrafttoolkit::strings.installer.installed_title', ['name' => $package->project_name]))
-                ->body($requiredMissing > 0
-                    ? trans('minecrafttoolkit::strings.installer.missing_dependencies', ['count' => $requiredMissing])
-                    : trans('minecrafttoolkit::strings.installer.written_to', ['directory' => $this->packageDirectory()]))
+                ->body(trans('minecrafttoolkit::strings.installer.written_to_with_dependencies', ['directory' => $this->packageDirectory()]))
                 ->success()
-                ->persistent($requiredMissing > 0)
                 ->send();
 
             $this->candidate = null;
@@ -338,7 +330,7 @@ class MinecraftInstallerPage extends Page implements HasSchemas
         if ((bool) config('minecrafttoolkit.modrinth_enabled', true)) {
             $options['modrinth'] = 'Modrinth';
         }
-        if ((bool) config('minecrafttoolkit.curseforge_enabled', true)
+        if ((bool) config('minecrafttoolkit.curseforge_enabled', false)
         ) {
             $options['curseforge'] = $this->curseForgeConfigured()
                 ? 'CurseForge'
@@ -380,7 +372,7 @@ class MinecraftInstallerPage extends Page implements HasSchemas
     private static function hasEnabledSource(): bool
     {
         return (bool) config('minecrafttoolkit.modrinth_enabled', true)
-            || (bool) config('minecrafttoolkit.curseforge_enabled', true);
+            || (bool) config('minecrafttoolkit.curseforge_enabled', false);
     }
 
     private function notifyError(string $title, MinecraftToolkitException $exception): void

@@ -23,6 +23,16 @@ class MinecraftServerFileService
         return $this->repository($server)->getContent($this->safePath($path), $limit);
     }
 
+
+    /** @return array<int, array<string, mixed>> */
+    public function listDirectory(Server $server, string $path): array
+    {
+        return collect($this->repository($server)->getDirectory($this->safePath($path)))
+            ->filter(fn (mixed $file): bool => is_array($file))
+            ->values()
+            ->all();
+    }
+
     public function exists(Server $server, string $path): bool
     {
         $path = $this->safePath($path);
@@ -64,6 +74,14 @@ class MinecraftServerFileService
 
     /** @param array<string, string> $hashes */
     public function downloadJar(Server $server, string $url, string $path, array $hashes = []): void
+    {
+        $this->downloadJarWithMetadata($server, $url, $path, $hashes);
+    }
+
+    /** @param array<string, string> $hashes
+     *  @return array{sha1: string, sha256: string, sha512: string, size: int, plugin_version: ?string, class_major_version: ?int}
+     */
+    public function downloadJarWithMetadata(Server $server, string $url, string $path, array $hashes = []): array
     {
         $this->assertDownloadUrl($url);
         $path = $this->safePath($path);
@@ -108,8 +126,66 @@ class MinecraftServerFileService
             throw new MinecraftToolkitException('Die MD5-Prüfsumme des Downloads ist ungültig.');
         }
 
+        $metadata = [
+            'sha1' => hash('sha1', $contents),
+            'sha256' => hash('sha256', $contents),
+            'sha512' => hash('sha512', $contents),
+            'size' => strlen($contents),
+            'plugin_version' => $this->extractPluginVersionFromJar($contents),
+            'class_major_version' => $this->extractMaxClassMajorVersionFromJar($contents),
+        ];
+
+        $this->assertJavaClassVersionAllowed($metadata['class_major_version']);
+
         $this->ensureDirectory($this->repository($server), basename(dirname($path)), dirname(dirname($path)) ?: '/');
         $this->write($server, $path, $contents);
+
+        return $metadata;
+    }
+
+    private function extractPluginVersionFromJar(string $contents): ?string
+    {
+        if (!class_exists(\ZipArchive::class)) {
+            return null;
+        }
+
+        $tmp = tempnam(sys_get_temp_dir(), 'mtk-jar-');
+        if ($tmp === false) {
+            return null;
+        }
+
+        try {
+            file_put_contents($tmp, $contents);
+            $zip = new \ZipArchive();
+            if ($zip->open($tmp) !== true) {
+                return null;
+            }
+
+            foreach (['plugin.yml', 'paper-plugin.yml', 'bungee.yml', 'velocity-plugin.json'] as $entry) {
+                $data = $zip->getFromName($entry);
+                if (!is_string($data)) {
+                    continue;
+                }
+
+                if ($entry === 'velocity-plugin.json') {
+                    $json = json_decode($data, true);
+                    if (is_array($json) && is_string($json['version'] ?? null)) {
+                        return trim($json['version']);
+                    }
+                }
+
+                if (preg_match('/^version:\s*["\']?([^"\'\r\n#]+)["\']?/mi', $data, $matches)) {
+                    return trim($matches[1]);
+                }
+            }
+
+            return null;
+        } finally {
+            if (isset($zip) && $zip instanceof \ZipArchive) {
+                $zip->close();
+            }
+            @unlink($tmp);
+        }
     }
 
     public function backupIfPresent(Server $server, string $path): ?string

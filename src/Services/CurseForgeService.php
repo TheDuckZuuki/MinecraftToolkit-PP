@@ -84,6 +84,14 @@ class CurseForgeService
 
         $project = $this->project((int) $projectId);
         $files = $this->files((int) $projectId, $setup);
+        usort($files, function (array $a, array $b): int {
+            $dateCompare = strcmp((string) ($b['fileDate'] ?? ''), (string) ($a['fileDate'] ?? ''));
+            if ($dateCompare !== 0) {
+                return $dateCompare;
+            }
+
+            return ((int) ($b['id'] ?? 0)) <=> ((int) ($a['id'] ?? 0));
+        });
         $file = collect($files)
             ->where('releaseType', 1)
             ->first(fn (mixed $candidate): bool => is_array($candidate) && !$this->isServerPack($candidate))
@@ -363,7 +371,7 @@ class CurseForgeService
 
     private function assertEnabled(): void
     {
-        if (!(bool) config('minecrafttoolkit.curseforge_enabled', true)) {
+        if (!(bool) config('minecrafttoolkit.curseforge_enabled', false)) {
             throw new MinecraftToolkitException('CurseForge ist in den Plugin-Einstellungen deaktiviert.');
         }
 
@@ -376,7 +384,7 @@ class CurseForgeService
 
     public function isConfigured(): bool
     {
-        return (bool) config('minecrafttoolkit.curseforge_enabled', true)
+        return (bool) config('minecrafttoolkit.curseforge_enabled', false)
             && ($this->usesProxy() || $this->apiKeyProvider->hasKey());
     }
 

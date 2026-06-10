@@ -2,7 +2,7 @@
   "id": "minecrafttoolkit",
   "name": "Minecraft Toolkit",
   "author": "BlueWolf",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "Sets up Java and Bedrock Minecraft servers and safely manages Modrinth and CurseForge packages, Folia, crossplay, updates, and version changes.",
   "category": "plugin",
   "url": "https://github.com/BlueDragon4251/MinecraftToolkit-PP",
