@@ -13,6 +13,10 @@ on:
       - 'routes/**'
       - 'config/**'
       - 'database/**'
+      - 'update.json'
+      - 'CHANGELOG.md'
+      - 'README.md'
+      - '.github/workflows/release.yml'
 
 permissions:
   contents: write
@@ -49,7 +53,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Copy plugin files
-        if: steps.check_release.outputs.exists == 'false'
         run: |
           mkdir -p /tmp/release
           for path in \
@@ -63,6 +66,7 @@ jobs:
             phpstan.neon \
             phpstan-baseline.neon \
             pint.json \
+            update.json \
             CHANGELOG.md \
             LICENSE \
             README.md
@@ -73,7 +77,6 @@ jobs:
           done
 
       - name: Remove meta tag from plugin.json
-        if: steps.check_release.outputs.exists == 'false'
         run: |
           cd /tmp/release
           jq 'del(.meta)' plugin.json > plugin_tmp.json && mv plugin_tmp.json plugin.json
@@ -81,13 +84,11 @@ jobs:
           cat plugin.json
 
       - name: Configure git
-        if: steps.check_release.outputs.exists == 'false'
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
 
       - name: Checkout main
-        if: steps.check_release.outputs.exists == 'false'
         uses: actions/checkout@v4
         with:
           ref: main
@@ -95,16 +96,14 @@ jobs:
           fetch-depth: 0
 
       - name: Update main branch
-        if: steps.check_release.outputs.exists == 'false'
         run: |
           cd main
-          rm -rf plugin.json src lang resources routes config database phpstan.neon phpstan-baseline.neon pint.json CHANGELOG.md LICENSE README.md
+          rm -rf plugin.json src lang resources routes config database phpstan.neon phpstan-baseline.neon pint.json update.json CHANGELOG.md LICENSE README.md
           cp -r /tmp/release/* .
           ls -la
           echo "--- Updated files on main ---"
 
       - name: Commit and push to main
-        if: steps.check_release.outputs.exists == 'false'
         run: |
           cd main
           git add -A
