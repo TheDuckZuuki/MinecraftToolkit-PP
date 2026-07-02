@@ -22,6 +22,7 @@ class MinecraftToolkitPackage extends Model
             'is_system_package' => 'boolean',
             'managed' => 'boolean',
             'enabled' => 'boolean',
+            'update_pinned' => 'boolean',
             'installed_at' => 'datetime',
             'last_checked_at' => 'datetime',
         ];

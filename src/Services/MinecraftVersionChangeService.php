@@ -246,7 +246,7 @@ class MinecraftVersionChangeService
         $removed = 0;
         $errors = [];
         foreach ($results as $result) {
-            if (!in_array($result['status'], ['incompatible', 'unknown'], true)) {
+            if (!in_array($result['status'], ['incompatible', 'unknown', 'pinned'], true)) {
                 continue;
             }
 

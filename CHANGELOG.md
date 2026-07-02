@@ -6,7 +6,7 @@ The changelog is maintained under the current release version. New changes are a
 
 This project is source-available, not open source. See [`LICENSE`](./LICENSE) for usage rights.
 
-## [1.2.1] - Unreleased
+## [1.3.0] - Unreleased
 
 ### Added
 
@@ -39,10 +39,25 @@ This project is source-available, not open source. See [`LICENSE`](./LICENSE) fo
 
 ### Note
 
-- Temporarily disabled CurseForge by default for public builds; administrators can still enable it with a private proxy or a private direct API key.
-- Removed the default active CurseForge proxy URL and proxy secret from runtime configuration so normal installs only use Modrinth unless CurseForge is explicitly configured.
+- CurseForge now uses the public Toolkit-compatible proxy by default, so normal installs can use Modrinth and CurseForge without shipping a CurseForge API key.
+- Administrators can still disable CurseForge, override the proxy URL, set a proxy secret for private proxies, or use a private direct API key.
 
 ### Added
+
+- Added download hardening for direct package downloads, including redirect target validation and private/reserved IP blocking.
+- Added optional strict package hash mode with `MINECRAFT_TOOLKIT_HASH_REQUIRED`.
+- Added JAR magic-byte and archive-entry validation before downloaded JAR files are written to a server.
+- Added plugin-local Pint and PHPStan configuration files for release checks.
+- Added package pinning so managed plugins/mods can be excluded from update checks, update-all, and automatic version-change updates.
+- Added a Minecraft Overview backup inventory for recent Toolkit backup folders.
+- Added source status cards to Minecraft Overview for Modrinth, CurseForge, and Crossplay configuration.
+- Added updater package verification for installed managed JARs, including stored hash checks, JAR structure validation, metadata extraction, and Java class-version checks.
+- Added lightweight package health scores to the updater.
+- Added richer installer review metadata, including upstream project links, categories, publish/update dates, file size, source hashes, and compatibility details.
+- Added installer search filters for category, author, server-side metadata, minimum downloads, and result sorting.
+- Added a lightweight language QA script to compare English/German translation keys and flag common mojibake artifacts.
+- Added updater bulk actions to pin all, unpin all, and verify all managed packages.
+- Added plugin update feed metadata through `plugin.json` and `update.json`.
 
 - Added paged `server.properties` editing in Minecraft Settings, including standard Java properties plus a full raw editor for unknown or newer values.
 - Added a Java class-version safety check for downloaded JAR files. Public builds default to Java 21 / class version 65 and reject newer JARs before writing them to the server.
@@ -72,6 +87,7 @@ This project is source-available, not open source. See [`LICENSE`](./LICENSE) fo
 - Added CurseForge package source support through the BlueIT/Vercel proxy flow.
 - Added optional direct CurseForge API key fallback for private/self-hosted installations.
 - Added CurseForge disabled mode when neither proxy nor private key is available.
+- Added the public Toolkit-compatible CurseForge proxy as the default proxy URL for public builds.
 - Added default popular package listing in the installer, so users do not need to search before seeing compatible packages.
 - Added pagination for package browsing.
 - Added package source, project ID, version ID, file name, target path, dependency, and managed-state tracking.
@@ -96,6 +112,8 @@ This project is source-available, not open source. See [`LICENSE`](./LICENSE) fo
 
 - Changed the setup Mods/Plugins step back to the same card-style package browser used by the installer, without rendering it outside the Mods/Plugins wizard step.
 - Changed Geyser configuration patching to update the modern `java.auth-type` and `motd` sections instead of only adding legacy/unused keys.
+- Changed the plugin version to `1.3.0`.
+
 - Changed the setup wizard defaults so no server software is preselected before the user chooses one.
 - Marked the plugin as source-available, not open source.
 - Clarified that redistribution, rebranding, public forks, modified public releases, and resale are not allowed without permission.
@@ -104,13 +122,15 @@ This project is source-available, not open source. See [`LICENSE`](./LICENSE) fo
 - Added Folia to the supported software table in the README.
 - Updated README with setup package installation, popular package browsing, MOTD formatter, crossplay behavior, language behavior, installation notes, and changelog reference.
 - Kept the plugin language handling isolated to Minecraft Toolkit and did not change the global Pelican locale.
-- Set the plugin version to `1.2.0` as requested for the next package build.
+- Set the plugin version to `1.2.0` as requested for the previous package build.
 
 ### Fixed
 
 - Fixed setup package selection showing as an old dropdown instead of the installer-style package browser.
 - Fixed setup installs accepting plugin JARs that require a newer Java runtime than the configured server Java version can load.
 - Fixed Geyser MOTD/auth patching leaving `motd.primary-motd`, `motd.secondary-motd`, `motd.passthrough-motd`, and `java.auth-type` unchanged.
+- Fixed NeoForge version and loader discovery so legacy `1.20.1` loaders from `net/neoforged/forge` and modern NeoForge loaders from `net/neoforged/neoforge` are both selectable, while modern `26.x` Minecraft version labels stay unchanged.
+
 - Fixed setup package selection by replacing the embedded Livewire package-browser partial inside the wizard with a stable Filament multi-select field, preventing `AnonymousComponent::setupPackageSelected()` 500 errors during Modrinth loading.
 - Fixed setup package selection rendering before software selection by removing the custom package-browser view from the setup wizard render path.
 - Fixed the setup package browser appearing before a server software was selected by starting the setup wizard with no preselected software.

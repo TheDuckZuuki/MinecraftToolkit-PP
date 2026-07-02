@@ -8,6 +8,7 @@ use App\Models\Server;
 use App\Repositories\Daemon\DaemonFileRepository;
 use BlueWolf\MinecraftToolkit\Exceptions\MinecraftToolkitException;
 use Illuminate\Contracts\Filesystem\FileNotFoundException;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Http;
 
@@ -125,16 +126,15 @@ class MinecraftServerFileService
             throw new MinecraftToolkitException('Es dürfen nur JAR-Dateien installiert werden.');
         }
 
-        $response = Http::withUserAgent((string) config('minecrafttoolkit.user_agent'))
-            ->connectTimeout(5)
-            ->timeout((int) config('minecrafttoolkit.download_timeout', 300))
-            ->get($url)
-            ->throw();
+        $response = $this->downloadResponse($url);
         $contents = $response->body();
 
-        if ($contents === '' || strlen($contents) > (int) config('minecrafttoolkit.max_package_bytes', 104857600)) {
+        if ($contents === '' || strlen($contents) > $this->configInt('max_package_bytes', 104857600)) {
             throw new MinecraftToolkitException('Der Paketdownload ist leer oder überschreitet das Größenlimit.');
         }
+
+        $this->assertJarMagicBytes($contents);
+        $this->assertStrongHashPolicy($hashes);
 
         $expectedSha512 = Arr::get($hashes, 'sha512');
         $expectedSha256 = Arr::get($hashes, 'sha256');
@@ -162,6 +162,24 @@ class MinecraftServerFileService
             throw new MinecraftToolkitException('Die MD5-Prüfsumme des Downloads ist ungültig.');
         }
 
+        $metadata = $this->inspectJarContents($contents);
+
+        $this->ensureDirectory($this->repository($server), basename(dirname($path)), dirname(dirname($path)) ?: '/');
+        $this->write($server, $path, $contents);
+
+        return $metadata;
+    }
+
+    /** @return array{sha1: string, sha256: string, sha512: string, size: int, plugin_version: ?string, class_major_version: ?int} */
+    public function inspectJarContents(string $contents): array
+    {
+        if ($contents === '' || strlen($contents) > $this->configInt('max_package_bytes', 104857600)) {
+            throw new MinecraftToolkitException('Der Paketinhalt ist leer oder ueberschreitet das Groessenlimit.');
+        }
+
+        $this->assertJarMagicBytes($contents);
+        $this->assertSafeJarStructure($contents);
+
         $metadata = [
             'sha1' => hash('sha1', $contents),
             'sha256' => hash('sha256', $contents),
@@ -173,10 +191,35 @@ class MinecraftServerFileService
 
         $this->assertJavaClassVersionAllowed($metadata['class_major_version']);
 
-        $this->ensureDirectory($this->repository($server), basename(dirname($path)), dirname(dirname($path)) ?: '/');
-        $this->write($server, $path, $contents);
-
         return $metadata;
+    }
+
+    private function downloadResponse(string $url): Response
+    {
+        $currentUrl = $url;
+
+        for ($redirects = 0; $redirects <= 5; $redirects++) {
+            $this->assertDownloadUrl($currentUrl);
+
+            $response = Http::withUserAgent($this->configString('user_agent', 'Pelican-Minecraft-Toolkit/1.2.0'))
+                ->connectTimeout(5)
+                ->timeout($this->configInt('download_timeout', 300))
+                ->withoutRedirecting()
+                ->get($currentUrl);
+
+            if (!in_array($response->status(), [301, 302, 303, 307, 308], true)) {
+                return $response->throw();
+            }
+
+            $location = $response->header('Location');
+            if (!is_string($location) || trim($location) === '') {
+                throw new MinecraftToolkitException('Der Download wurde ohne gueltiges Redirect-Ziel umgeleitet.');
+            }
+
+            $currentUrl = $this->resolveRedirectUrl($currentUrl, $location);
+        }
+
+        throw new MinecraftToolkitException('Der Download wurde zu oft umgeleitet.');
     }
 
     private function extractPluginVersionFromJar(string $contents): ?string
@@ -224,86 +267,47 @@ class MinecraftServerFileService
         }
     }
 
-
-
     private function extractMaxClassMajorVersionFromJar(string $contents): ?int
     {
         if (!class_exists(\ZipArchive::class)) {
             return null;
         }
 
-        $tmp = tempnam(sys_get_temp_dir(), 'mtk-class-');
-        if ($tmp === false) {
-            return null;
-        }
+        return $this->withJar($contents, function (\ZipArchive $zip): ?int {
+            $max = null;
 
-        try {
-            file_put_contents($tmp, $contents);
-            $zip = new \ZipArchive();
-            if ($zip->open($tmp) !== true) {
-                return null;
-            }
-
-            $maxMajor = null;
             for ($index = 0; $index < $zip->numFiles; $index++) {
-                $stat = $zip->statIndex($index);
-                if (!is_array($stat)) {
+                $name = $zip->getNameIndex($index);
+                if (!is_string($name) || !str_ends_with(strtolower($name), '.class')) {
                     continue;
                 }
 
-                $name = (string) ($stat['name'] ?? '');
-                if (!str_ends_with($name, '.class')) {
+                $data = $zip->getFromIndex($index);
+                if (!is_string($data) || strlen($data) < 8 || substr($data, 0, 4) !== "\xCA\xFE\xBA\xBE") {
                     continue;
                 }
 
-                $stream = $zip->getStream($name);
-                if ($stream === false) {
-                    continue;
-                }
-
-                $header = fread($stream, 8);
-                fclose($stream);
-
-                if (!is_string($header) || strlen($header) < 8) {
-                    continue;
-                }
-
-                $data = unpack('Nmagic/nminor/nmajor', $header);
-                if (!is_array($data) || ($data['magic'] ?? null) !== 0xCAFEBABE) {
-                    continue;
-                }
-
-                $major = (int) ($data['major'] ?? 0);
-                if ($major > 0 && ($maxMajor === null || $major > $maxMajor)) {
-                    $maxMajor = $major;
+                $header = unpack('nminor/nmajor', substr($data, 4, 4));
+                $major = is_array($header) ? (int) ($header['major'] ?? 0) : 0;
+                if ($major > 0) {
+                    $max = $max === null ? $major : max($max, $major);
                 }
             }
 
-            return $maxMajor;
-        } finally {
-            if (isset($zip) && $zip instanceof \ZipArchive) {
-                $zip->close();
-            }
-            @unlink($tmp);
-        }
+            return $max;
+        });
     }
 
-    private function assertJavaClassVersionAllowed(?int $classMajorVersion): void
+    private function assertJavaClassVersionAllowed(?int $majorVersion): void
     {
-        if ($classMajorVersion === null) {
+        $allowed = $this->configInt('java_class_version_max', 65);
+        if ($majorVersion === null || $allowed <= 0 || $majorVersion <= $allowed) {
             return;
         }
 
-        $max = (int) config('minecrafttoolkit.java_class_version_max', 65);
-        if ($max <= 0 || $classMajorVersion <= $max) {
-            return;
-        }
-
-        throw new MinecraftToolkitException(sprintf(
-            'Diese JAR benötigt eine neuere Java-Version (Class-Version %d). Auf diesem Panel ist maximal Class-Version %d erlaubt. Verwende eine ältere Paketversion oder erhöhe MINECRAFT_TOOLKIT_JAVA_CLASS_VERSION_MAX passend zur Server-Java-Version.',
-            $classMajorVersion,
-            $max
-        ));
+        throw new MinecraftToolkitException(
+            "Die JAR benoetigt Java-Class-Version $majorVersion, erlaubt ist maximal $allowed."
+        );
     }
 
     public function backupIfPresent(Server $server, string $path): ?string
@@ -345,6 +349,49 @@ class MinecraftServerFileService
         $this->repository($server)->deleteFiles('/', [ltrim($path, '/')])->throw();
     }
 
+    /** @return array<int, array{path: string, created: string, files: array<int, array{name: string, size: int|null}>}> */
+    public function listBackups(Server $server, int $limit = 10): array
+    {
+        $root = '/.minecraft-toolkit/backups';
+
+        try {
+            $directories = collect($this->listDirectory($server, $root))
+                ->filter(fn (array $file): bool => (bool) ($file['is_file'] ?? false) === false)
+                ->sortByDesc(fn (array $file): string => (string) ($file['name'] ?? ''))
+                ->take(max(1, $limit));
+
+            return $directories
+                ->map(function (array $directory) use ($server, $root): array {
+                    $name = (string) ($directory['name'] ?? '');
+                    $path = "$root/$name";
+
+                    try {
+                        $files = collect($this->listDirectory($server, $path))
+                            ->filter(fn (array $file): bool => (bool) ($file['is_file'] ?? true))
+                            ->map(fn (array $file): array => [
+                                'name' => (string) ($file['name'] ?? ''),
+                                'size' => isset($file['size']) ? (int) $file['size'] : null,
+                            ])
+                            ->filter(fn (array $file): bool => $file['name'] !== '')
+                            ->values()
+                            ->all();
+                    } catch (\Throwable) {
+                        $files = [];
+                    }
+
+                    return [
+                        'path' => $path,
+                        'created' => $name,
+                        'files' => $files,
+                    ];
+                })
+                ->values()
+                ->all();
+        } catch (\Throwable) {
+            return [];
+        }
+    }
+
     private function ensureDirectory(DaemonFileRepository $repository, string $name, string $path): void
     {
         try {
@@ -368,10 +415,180 @@ class MinecraftServerFileService
         return $path;
     }
 
+    private function assertJarMagicBytes(string $contents): void
+    {
+        if (str_starts_with($contents, "PK\x03\x04")
+            || str_starts_with($contents, "PK\x05\x06")
+            || str_starts_with($contents, "PK\x07\x08")) {
+            return;
+        }
+
+        throw new MinecraftToolkitException('Der Download ist keine gueltige JAR/ZIP-Datei.');
+    }
+
+    /** @param array<string, string> $hashes */
+    private function assertStrongHashPolicy(array $hashes): void
+    {
+        if (!$this->configBool('hash_required', false)) {
+            return;
+        }
+
+        if (is_string($hashes['sha512'] ?? null) || is_string($hashes['sha256'] ?? null)) {
+            return;
+        }
+
+        throw new MinecraftToolkitException(
+            'Diese Installation verlangt SHA-256 oder SHA-512 fuer Paketdownloads.'
+        );
+    }
+
+    private function assertSafeJarStructure(string $contents): void
+    {
+        if (!class_exists(\ZipArchive::class)) {
+            return;
+        }
+
+        $this->withJar($contents, function (\ZipArchive $zip): void {
+            if ($zip->numFiles > $this->configInt('max_jar_entries', 20000)) {
+                throw new MinecraftToolkitException('Die JAR enthaelt zu viele Dateien.');
+            }
+
+            $maxEntryBytes = $this->configInt('max_jar_entry_bytes', 52428800);
+            for ($index = 0; $index < $zip->numFiles; $index++) {
+                $name = $zip->getNameIndex($index);
+                $stat = $zip->statIndex($index);
+                if (!is_string($name)
+                    || $name === ''
+                    || str_contains($name, "\0")
+                    || str_contains($name, '\\')
+                    || str_starts_with($name, '/')
+                    || preg_match('#(^|/)\.\.(/|$)#', $name)
+                    || preg_match('/^[A-Za-z]:/', $name)) {
+                    throw new MinecraftToolkitException('Die JAR enthaelt unsichere Dateipfade.');
+                }
+
+                $size = is_array($stat) ? (int) ($stat['size'] ?? 0) : 0;
+                if ($size > $maxEntryBytes) {
+                    throw new MinecraftToolkitException('Die JAR enthaelt eine zu grosse Einzeldatei.');
+                }
+            }
+        });
+    }
+
+    /** @param callable(\ZipArchive): mixed $callback */
+    private function withJar(string $contents, callable $callback): mixed
+    {
+        $tmp = tempnam(sys_get_temp_dir(), 'mtk-jar-');
+        if ($tmp === false) {
+            return null;
+        }
+
+        try {
+            file_put_contents($tmp, $contents);
+            $zip = new \ZipArchive();
+            if ($zip->open($tmp) !== true) {
+                throw new MinecraftToolkitException('Die JAR konnte nicht geoeffnet werden.');
+            }
+
+            return $callback($zip);
+        } finally {
+            if (isset($zip) && $zip instanceof \ZipArchive) {
+                $zip->close();
+            }
+            @unlink($tmp);
+        }
+    }
+
+    private function resolveRedirectUrl(string $baseUrl, string $location): string
+    {
+        if (parse_url($location, PHP_URL_SCHEME) !== null) {
+            return $location;
+        }
+
+        $base = parse_url($baseUrl);
+        $scheme = (string) ($base['scheme'] ?? 'https');
+        $host = (string) ($base['host'] ?? '');
+        $port = isset($base['port']) ? ':' . $base['port'] : '';
+        if (str_starts_with($location, '//')) {
+            return "$scheme:$location";
+        }
+        if (str_starts_with($location, '/')) {
+            return "$scheme://$host$port$location";
+        }
+
+        $path = (string) ($base['path'] ?? '/');
+        $directory = rtrim(str_replace('\\', '/', dirname($path)), '/');
+
+        return "$scheme://$host$port$directory/$location";
+    }
+
+    private function hostUsesPrivateAddress(string $host): bool
+    {
+        if (!$this->configBool('block_private_download_ips', true)) {
+            return false;
+        }
+
+        if (filter_var($host, FILTER_VALIDATE_IP)) {
+            return $this->isPrivateAddress($host);
+        }
+
+        $records = @dns_get_record($host, DNS_A + DNS_AAAA);
+        if (!is_array($records) || $records === []) {
+            $ips = @gethostbynamel($host) ?: [];
+            $records = array_map(fn (string $ip): array => ['ip' => $ip], $ips);
+        }
+
+        foreach ($records as $record) {
+            $ip = $record['ip'] ?? $record['ipv6'] ?? null;
+            if (is_string($ip) && $this->isPrivateAddress($ip)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function isPrivateAddress(string $ip): bool
+    {
+        return filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false;
+    }
+
+    private function configBool(string $key, bool $default): bool
+    {
+        return filter_var($this->configValue($key, $default), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? $default;
+    }
+
+    private function configInt(string $key, int $default): int
+    {
+        return max(0, (int) $this->configValue($key, $default));
+    }
+
+    private function configString(string $key, string $default): string
+    {
+        return (string) $this->configValue($key, $default);
+    }
+
+    private function configValue(string $key, mixed $default): mixed
+    {
+        try {
+            return function_exists('config') ? config("minecrafttoolkit.$key", $default) : $default;
+        } catch (\Throwable) {
+            return $default;
+        }
+    }
+
     private function assertDownloadUrl(string $url): void
     {
         $parts = parse_url($url);
         $host = strtolower((string) ($parts['host'] ?? ''));
+        $scheme = strtolower((string) ($parts['scheme'] ?? ''));
+        if ($scheme !== 'https'
+            || $host === ''
+            || isset($parts['user'])
+            || isset($parts['pass'])
+            || !in_array((int) ($parts['port'] ?? 443), [443], true)) {
+            throw new MinecraftToolkitException('Die Download-URL ist aus Sicherheitsgruenden nicht erlaubt.');
+        }
         $allowedDomains = [
             'mojang.com',
             'minecraft.net',
@@ -385,11 +602,15 @@ class MinecraftServerFileService
             'curseforge.com',
             'forgecdn.net',
         ];
-        $allowed = collect($allowedDomains)->contains(
-            fn (string $domain): bool => $host === $domain || str_ends_with($host, ".$domain")
-        );
+        $allowed = false;
+        foreach ($allowedDomains as $domain) {
+            if ($host === $domain || str_ends_with($host, ".$domain")) {
+                $allowed = true;
+                break;
+            }
+        }
 
-        if (($parts['scheme'] ?? null) !== 'https' || !$allowed) {
+        if (!$allowed || $this->hostUsesPrivateAddress($host)) {
             throw new MinecraftToolkitException('Die Download-URL ist aus Sicherheitsgründen nicht erlaubt.');
         }
     }

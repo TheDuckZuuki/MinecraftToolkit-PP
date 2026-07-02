@@ -61,7 +61,7 @@ class MinecraftCompatibilityService
                 'loader_version' => $target->loader_version,
             ],
             'packages' => $packages,
-            'blocking' => collect($packages)->whereIn('status', ['incompatible', 'unknown'])->count(),
+            'blocking' => collect($packages)->whereIn('status', ['incompatible', 'unknown', 'pinned'])->count(),
             'updates' => collect($packages)->whereIn('status', ['update_required', 'system_update'])->count(),
         ];
     }
@@ -93,6 +93,7 @@ class MinecraftCompatibilityService
             'current_version' => $package->version_number,
             'target_version' => null,
             'system' => $package->is_system_package,
+            'pinned' => (bool) $package->update_pinned,
         ];
 
         if (in_array($package->source, ['modrinth', 'curseforge'], true)) {
@@ -102,6 +103,13 @@ class MinecraftCompatibilityService
                     : $this->curseForge->updateCandidate($package->source_project_id, $target);
                 $version = $candidate['version'];
                 $sameVersion = (string) $version['id'] === (string) $package->source_version_id;
+                if (!$sameVersion && $package->update_pinned) {
+                    return $base + [
+                        'status' => 'pinned',
+                        'target_version' => (string) ($version['version_number'] ?? $version['name'] ?? $version['id']),
+                        'message' => 'Das Paket ist gepinnt und wird beim Versionswechsel nicht automatisch aktualisiert.',
+                    ];
+                }
 
                 return $base + [
                     'status' => $sameVersion ? 'compatible' : 'update_required',
@@ -125,11 +133,12 @@ class MinecraftCompatibilityService
             && in_array($package->source_project_id, ['geyser', 'floodgate'], true)) {
             try {
                 $download = $this->geyser->latestSpigot($package->source_project_id);
+                $sameBuild = (string) $download['build'] === (string) $package->source_version_id;
 
                 return $base + [
-                    'status' => (string) $download['build'] === (string) $package->source_version_id
+                    'status' => $sameBuild
                         ? 'compatible'
-                        : 'system_update',
+                        : ($package->update_pinned ? 'pinned' : 'system_update'),
                     'target_version' => $download['version'] . '+' . $download['build'],
                     'message' => 'Das Crossplay-Systempaket wird für den Zielserver beibehalten.',
                 ];

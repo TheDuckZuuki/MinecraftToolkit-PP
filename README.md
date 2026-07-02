@@ -6,7 +6,7 @@ Minecraft Toolkit is a Pelican Panel plugin for setting up and managing Minecraf
 
 See [`CHANGELOG.md`](./CHANGELOG.md) for version history and notable changes.
 
-Current version: `1.2.1`.
+Current version: `1.3.0`.
 
 ## License and usage rights
 
@@ -14,7 +14,7 @@ Minecraft Toolkit is **source-available, not open source**. You may download and
 
 Official distribution is only allowed through channels approved by Nico Egger / BlueIT, such as the official GitHub repository and the Pelican Hub. See [`LICENSE`](./LICENSE) for the full terms.
 
-No CurseForge API key is included in the public plugin source. CurseForge is enabled through the BlueIT service by default, so normal users can browse supported CurseForge packages without seeing backend API details in the panel.
+No CurseForge API key is included in the public plugin source. CurseForge is enabled through the signed BlueIT service by default, so normal users can browse supported CurseForge packages without seeing backend API details in the panel. Administrators can override it with a private proxy, disable CurseForge, or use a private local API key.
 
 ## Features
 
@@ -23,12 +23,14 @@ No CurseForge API key is included in the public plugin source. CurseForge is ena
 - Generation of `eula.txt` and `server.properties`
 - Optional plugin/mod selection during setup; selected packages from Modrinth and CurseForge can be mixed and are installed immediately after setup completes
 - Installer opens with popular compatible packages before searching. The setup package browser is shown only inside the Mods/Plugins setup step and can load popular packages from the selected enabled source.
+- Installer review shows project links, categories, publish/update dates, file size, source hashes, and a compatibility summary before installation.
+- Package search can be narrowed by category, author, server-side metadata, minimum downloads, and result sorting.
 - MOTD formatter helper for Minecraft color and style codes
 - Primary server port taken from the Pelican allocation
 - Optional validated 64x64 PNG server icon
 - Modrinth plugin installation for Paper, Purpur, and Folia
 - Modrinth mod installation for Fabric, Forge, and NeoForge
-- Optional CurseForge plugin and mod installation through the BlueIT service or an optional private local API key
+- Optional CurseForge plugin and mod installation through the signed BlueIT service, a private proxy, or an optional private local API key
 - Required dependency auto-installation and optional dependency review
 - Optional Geyser and Floodgate crossplay for Paper and Purpur, including Bedrock port, Floodgate auth-type, and Geyser MOTD patching
 - Update checks for managed Modrinth, Geyser, and Floodgate packages
@@ -36,7 +38,7 @@ No CurseForge API key is included in the public plugin source. CurseForge is ena
 - Minecraft version changes with package compatibility checks
 - File backups before setup, configuration changes, and package updates
 - SHA verification when the package source provides a checksum
-- Per-server overview, settings, action logs, and update history
+- Per-server overview, settings, action logs, backup inventory, and update history
 
 All server files are accessed through Pelican's Wings API. The plugin does not require Panel and Wings to share a filesystem.
 
@@ -94,7 +96,7 @@ Existing target files are moved to:
 /.minecraft-toolkit/backups/YYYY-MM-DD-HH-mm-ss/
 ```
 
-Forge loader versions are resolved from both Maven metadata and Forge promotion metadata, so older Minecraft versions can still show their matching Forge builds when only recommended/latest metadata is exposed. Forge and NeoForge use their official `--installServer` flow during the first server start. Vanilla Bedrock downloads the official Linux Bedrock Dedicated Server ZIP and extracts it during the first server start. That first launch creates `run.sh` and the loader libraries and can take several minutes.
+Forge loader versions are resolved from both Maven metadata and Forge promotion metadata, so older Minecraft versions can still show their matching Forge builds when only recommended/latest metadata is exposed. NeoForge loader discovery includes the legacy `1.20.1` NeoForged Forge artifact and the modern NeoForge artifact, while preserving modern `26.x` Minecraft version labels. Forge and NeoForge use their official `--installServer` flow during the first server start. Vanilla Bedrock downloads the official Linux Bedrock Dedicated Server ZIP and extracts it during the first server start. That first launch creates `run.sh` and the loader libraries and can take several minutes.
 
 ## Supported Server Software
 
@@ -114,17 +116,18 @@ The Java version in the server image must support the selected Minecraft version
 
 After setup, open **Minecraft Installer**:
 
-1. Select Modrinth, or CurseForge when it has been enabled by an administrator.
+1. Select Modrinth or CurseForge.
 2. Browse the automatically loaded popular compatible package list or search for a project.
-3. Review the selected compatible version and its dependencies.
-4. Stop the server if it is running.
-5. Install the package.
+3. Optionally narrow results by category, author, server-side metadata, minimum downloads, or sorting.
+4. Review the selected compatible version, project source, categories, file size, source hashes, compatibility summary, and dependencies.
+5. Stop the server if it is running.
+6. Install the package.
 
-Search results are filtered by the configured Minecraft version, server loader, project type, and server-side compatibility. Client-only projects are blocked. Downloads are restricted to HTTPS and validated JAR filenames.
+Search results are filtered by the configured Minecraft version, server loader, project type, and server-side compatibility. Client-only projects are blocked. Downloads are restricted to HTTPS and validated JAR filenames. The review screen exposes source metadata from Modrinth or CurseForge so admins can inspect the upstream project page and integrity hints before writing files.
 
 Required dependencies reported by Modrinth or CurseForge are installed automatically before the selected package. Optional dependencies are shown for review but are not installed automatically.
 
-CurseForge is enabled by default through the BlueIT service. The real CurseForge API key stays outside the plugin source. Administrators can still override the backend connection or use a private direct API key in self-hosted/private installs. If CurseForge is disabled or no valid backend/key is available, CurseForge is hidden from server users while Modrinth continues to work.
+CurseForge is enabled by default through the signed BlueIT service. The real CurseForge API key stays outside the plugin source. Administrators can still override the backend connection or use a private direct API key in self-hosted/private installs. If CurseForge is disabled or no valid backend/key is available, CurseForge is hidden from server users while Modrinth continues to work.
 
 CurseForge does not consistently expose whether a mod is client-only or server-compatible. The Toolkit shows a warning for ambiguous CurseForge mods and requires the user to verify the project description before installation.
 
@@ -168,6 +171,12 @@ The updater currently supports:
 - Managed CurseForge plugins and mods
 - Geyser
 - Floodgate
+
+Managed packages can be pinned from the updater. Pinned packages are skipped by update checks, individual updates, bulk updates, and automatic version-change package updates. The updater also provides bulk actions to pin all packages, unpin all packages, or verify every managed package. During a Minecraft version change, a pinned package that would need a compatible replacement is shown as a blocking package until it is unpinned, removed with backup, or the user explicitly accepts the risk.
+
+The updater can also verify an installed managed package in place. Verification reads the current JAR through Wings, checks the stored SHA-512 or SHA-1 where available, validates the JAR archive structure, extracts plugin metadata, and applies the Java class-version safety check.
+
+Each managed package also shows a lightweight health score based on source trust, stored hash strength, pinning, verification status, update availability, and the latest updater error state.
 
 The updater also reports recent plugin load failures detected in `logs/latest.log`, including missing plugin dependencies and Java class-version incompatibilities. Manually uploaded files and the server software itself are not updated automatically.
 
@@ -238,9 +247,13 @@ Administrators can configure Minecraft Toolkit from the Pelican plugin settings 
 | `MINECRAFT_TOOLKIT_BEDROCK_FALLBACK_VERSIONS` | `latest` | Fallback Bedrock setup versions shown when live lookup fails. Use comma-separated explicit versions for direct version URLs. |
 | `MINECRAFT_TOOLKIT_HTTP_TIMEOUT` | `20` | Metadata API timeout in seconds |
 | `MINECRAFT_TOOLKIT_DOWNLOAD_TIMEOUT` | `300` | Package download timeout in seconds |
+| `MINECRAFT_TOOLKIT_BLOCK_PRIVATE_DOWNLOAD_IPS` | `true` | Blocks downloads that resolve to private, loopback, link-local, or reserved addresses |
+| `MINECRAFT_TOOLKIT_HASH_REQUIRED` | `false` | Requires SHA-256 or SHA-512 for package downloads when enabled |
 | `MINECRAFT_TOOLKIT_MAX_ICON_BYTES` | `2097152` | Maximum server icon size |
 | `MINECRAFT_TOOLKIT_MAX_PACKAGE_BYTES` | `104857600` | Maximum package size |
-| `MINECRAFT_TOOLKIT_USER_AGENT` | `BlueIT-MinecraftToolkit/1.2.1` | User-Agent for external requests |
+| `MINECRAFT_TOOLKIT_MAX_JAR_ENTRIES` | `20000` | Maximum number of entries accepted inside a downloaded JAR |
+| `MINECRAFT_TOOLKIT_MAX_JAR_ENTRY_BYTES` | `52428800` | Maximum uncompressed size for a single JAR entry |
+| `MINECRAFT_TOOLKIT_USER_AGENT` | `BlueIT-MinecraftToolkit/1.3.0` | User-Agent for external requests |
 
 After changing environment values manually, clear cached configuration:
 
@@ -261,9 +274,13 @@ Users without the required permissions do not see the corresponding Toolkit page
 
 - Server-changing actions require the server to be offline.
 - Download URLs must use HTTPS and an allowlisted official domain.
+- Direct Panel downloads validate each redirect target and block private, loopback, link-local, and reserved addresses.
 - Path traversal and unsafe JAR filenames are rejected.
 - Package size limits are enforced.
+- Downloaded JARs must have ZIP/JAR magic bytes and safe archive entry paths.
+- JARs are rejected when an entry count or single-entry size exceeds configured limits.
 - SHA-512, SHA-256, or SHA-1 is verified when supplied by the source.
+- Administrators can require SHA-256 or SHA-512 for package downloads with `MINECRAFT_TOOLKIT_HASH_REQUIRED=true`.
 - Existing files are backed up before replacement.
 - Technical exceptions are written to the Laravel log while the UI receives a short error message.
 
@@ -292,6 +309,7 @@ For Paper/Purpur crossplay, applying the Crossplay configuration also patches Ge
 - **Wings is unreachable:** verify node connectivity and credentials; Toolkit file actions intentionally stop instead of writing directly to node volumes.
 
 Logs for setup, installs, crossplay, checks, and updates are stored per server and shown on the Minecraft Overview page.
+The overview also lists source status cards for Modrinth, CurseForge, and Crossplay, plus recent Toolkit backup folders from `/.minecraft-toolkit/backups` so administrators can quickly find files created before setup, updates, removals, or version changes.
 
 
 ## CurseForge backend handling
@@ -300,9 +318,20 @@ CurseForge uses the BlueIT service by default. The panel settings intentionally 
 
 Manual browser navigation to the BlueIT backend returns to the website start page. Non-Toolkit HTTP clients are rejected before any CurseForge request is forwarded. Toolkit requests include a dedicated client marker, client id, timestamp, nonce, custom user agent, and HMAC signature. This keeps casual/manual access away from the backend while the real CurseForge API key remains server-side.
 
+Private proxy backend example:
+
+```env
+MINECRAFT_TOOLKIT_CURSEFORGE_ENABLED=true
+MINECRAFT_TOOLKIT_CURSEFORGE_PROXY_URL=https://your-vercel-domain.vercel.app/api/curseforge/proxy
+MINECRAFT_TOOLKIT_CURSEFORGE_PROXY_SECRET=your_proxy_secret
+MINECRAFT_TOOLKIT_CURSEFORGE_PROXY_CLIENT_ID=minecraft-toolkit
+MINECRAFT_TOOLKIT_CURSEFORGE_PROXY_SIGNED_REQUESTS=true
+```
+
 Advanced private installs can skip the default service and set their own private direct API key:
 
 ```env
+MINECRAFT_TOOLKIT_CURSEFORGE_ENABLED=true
 MINECRAFT_TOOLKIT_CURSEFORGE_API_KEY=your_private_key
 ```
 
@@ -313,6 +342,8 @@ Do not ship CurseForge API keys inside public plugin builds. If CurseForge is di
 Minecraft Toolkit includes English and German plugin translations.
 
 The plugin automatically uses German when the current Pelican/user locale starts with `de` such as `de`, `de_AT`, or `de_DE`. For every other locale, the plugin injects English strings as the fallback so users do not see untranslated German UI text.
+
+Run `php tests/lang-keys.php` from the plugin directory before releases to confirm English and German translation keys stay aligned and to catch common mojibake artifacts.
 
 
 ### Updater Dependency Repair and Package Removal

@@ -119,10 +119,12 @@ class CurseForgeService
             'version' => [
                 'id' => (string) $file['id'],
                 'version_number' => (string) ($file['displayName'] ?? $file['fileName']),
+                'date_published' => is_string($file['fileDate'] ?? null) ? $file['fileDate'] : null,
                 'selected_file' => [
                     'filename' => $file['fileName'],
                     'url' => $downloadUrl,
                     'hashes' => $file['hashes_normalized'],
+                    'size' => (int) ($file['fileLength'] ?? 0),
                 ],
             ],
             'dependencies' => $this->dependencyDetails($file),
@@ -180,6 +182,9 @@ class CurseForgeService
                 'icon_url' => is_string($project['logo']['thumbnailUrl'] ?? null)
                     ? $project['logo']['thumbnailUrl']
                     : null,
+                'project_url' => is_string($project['links']['websiteUrl'] ?? null)
+                    ? $project['links']['websiteUrl']
+                    : null,
                 'downloads' => (int) ($project['downloadCount'] ?? 0),
                 'author' => (string) ($project['authors'][0]['name'] ?? ''),
                 'server_side' => 'unknown',
@@ -188,6 +193,7 @@ class CurseForgeService
                     ->filter(fn (mixed $value): bool => is_string($value))
                     ->values()
                     ->all(),
+                'updated_at' => is_string($project['dateModified'] ?? null) ? $project['dateModified'] : null,
                 'versions' => collect($project['latestFilesIndexes'] ?? [])
                     ->pluck('gameVersion')
                     ->filter(fn (mixed $value): bool => is_string($value))
@@ -296,8 +302,18 @@ class CurseForgeService
             'icon_url' => is_string($project['logo']['thumbnailUrl'] ?? null)
                 ? $project['logo']['thumbnailUrl']
                 : null,
+            'project_url' => is_string($project['links']['websiteUrl'] ?? null)
+                ? $project['links']['websiteUrl']
+                : null,
             'downloads' => (int) ($project['downloadCount'] ?? 0),
             'server_side' => 'unknown',
+            'categories' => collect($project['categories'] ?? [])
+                ->pluck('name')
+                ->filter(fn (mixed $value): bool => is_string($value))
+                ->values()
+                ->all(),
+            'published_at' => is_string($project['dateCreated'] ?? null) ? $project['dateCreated'] : null,
+            'updated_at' => is_string($project['dateModified'] ?? null) ? $project['dateModified'] : null,
         ];
     }
 

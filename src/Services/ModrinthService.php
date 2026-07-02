@@ -131,10 +131,14 @@ class ModrinthService
                 'title' => (string) ($hit['title'] ?? 'Unbekanntes Projekt'),
                 'description' => (string) ($hit['description'] ?? ''),
                 'icon_url' => is_string($hit['icon_url'] ?? null) ? $hit['icon_url'] : null,
+                'project_url' => 'https://modrinth.com/' . (in_array((string) ($hit['project_type'] ?? ''), ['plugin', 'mod'], true)
+                    ? (string) ($hit['project_type'] ?? 'mod')
+                    : 'mod') . '/' . (string) ($hit['slug'] ?? $hit['project_id']),
                 'downloads' => (int) ($hit['downloads'] ?? 0),
                 'author' => (string) ($hit['author'] ?? ''),
                 'server_side' => (string) ($hit['server_side'] ?? 'unknown'),
                 'categories' => array_values(array_filter($hit['display_categories'] ?? $hit['categories'] ?? [], 'is_string')),
+                'updated_at' => is_string($hit['date_modified'] ?? null) ? $hit['date_modified'] : null,
                 'versions' => array_values(array_filter($hit['versions'] ?? [], 'is_string')),
             ])
             ->values()
@@ -294,8 +298,14 @@ class ModrinthService
             'title' => (string) ($project['title'] ?? 'Unbekanntes Projekt'),
             'description' => (string) ($project['description'] ?? ''),
             'icon_url' => is_string($project['icon_url'] ?? null) ? $project['icon_url'] : null,
+            'project_url' => is_string($project['slug'] ?? null)
+                ? 'https://modrinth.com/' . (string) ($project['project_type'] ?? 'mod') . '/' . $project['slug']
+                : null,
             'downloads' => (int) ($project['downloads'] ?? 0),
             'server_side' => (string) ($project['server_side'] ?? 'unknown'),
+            'categories' => array_values(array_filter($project['categories'] ?? [], 'is_string')),
+            'published_at' => is_string($project['published'] ?? null) ? $project['published'] : null,
+            'updated_at' => is_string($project['updated'] ?? null) ? $project['updated'] : null,
         ];
     }
 

@@ -32,6 +32,15 @@ class MinecraftUpdateService
         $checks = [];
         foreach ($this->managedPackages($server) as $package) {
             try {
+                if ($package->update_pinned) {
+                    $checks[] = $this->storeCheck(
+                        $package,
+                        'pinned',
+                        'Das Paket ist gepinnt und wird nicht automatisch aktualisiert.'
+                    );
+                    continue;
+                }
+
                 $package = $this->syncPackageWithInstalledState($server, $package);
                 if (($runtimeIssue = $this->runtimeIssue($server, $package)) !== null) {
                     $checks[] = $this->storeCheck($package, 'error', $runtimeIssue);
@@ -80,6 +89,9 @@ class MinecraftUpdateService
             ->first();
         if (!$package instanceof MinecraftToolkitPackage) {
             throw new MinecraftToolkitException('Das verwaltete Paket wurde nicht gefunden.');
+        }
+        if ($package->update_pinned) {
+            throw new MinecraftToolkitException('Dieses Paket ist gepinnt. Hebe den Pin auf, bevor du es aktualisierst.');
         }
 
         /** @var Lock $lock */
@@ -201,16 +213,22 @@ class MinecraftUpdateService
         }
     }
 
-    /** @return array{updated: int, failed: int, errors: string[]} */
+    /** @return array{updated: int, failed: int, skipped_pinned: int, errors: string[]} */
     public function updateAll(Server $server, MinecraftToolkitSetup $setup): array
     {
         $this->state->assertOffline($server);
         $this->checkAll($server, $setup);
         $updated = 0;
         $failed = 0;
+        $skippedPinned = 0;
         $errors = [];
 
         foreach ($this->managedPackages($server) as $packageRecord) {
+            if ($packageRecord->update_pinned) {
+                $skippedPinned++;
+                continue;
+            }
+
             $check = MinecraftToolkitUpdateCheck::query()
                 ->where('server_uuid', $server->uuid)
                 ->where('package_id', $packageRecord->id)
@@ -232,7 +250,114 @@ class MinecraftUpdateService
             }
         }
 
-        return compact('updated', 'failed', 'errors');
+        return [
+            'updated' => $updated,
+            'failed' => $failed,
+            'skipped_pinned' => $skippedPinned,
+            'errors' => $errors,
+        ];
+    }
+
+    public function setPackagePinned(Server $server, int $packageId, bool $pinned): MinecraftToolkitPackage
+    {
+        $package = MinecraftToolkitPackage::query()
+            ->whereKey($packageId)
+            ->where('server_uuid', $server->uuid)
+            ->where('managed', true)
+            ->where('enabled', true)
+            ->first();
+        if (!$package instanceof MinecraftToolkitPackage) {
+            throw new MinecraftToolkitException('Das verwaltete Paket wurde nicht gefunden.');
+        }
+
+        $package->forceFill([
+            'update_pinned' => $pinned,
+            'last_checked_at' => now(),
+        ])->save();
+
+        $this->storeCheck(
+            $package,
+            $pinned ? 'pinned' : 'unchecked',
+            $pinned
+                ? 'Das Paket wurde gepinnt und wird von automatischen Updates ausgenommen.'
+                : 'Der Pin wurde entfernt. Das Paket kann wieder aktualisiert werden.'
+        );
+        $this->log($server, $pinned ? 'package_pinned' : 'package_unpinned', 'info', sprintf(
+            '%s wurde %s.',
+            $package->project_name,
+            $pinned ? 'gepinnt' : 'entpinnt'
+        ), ['package_id' => $package->id]);
+
+        return $package->refresh();
+    }
+
+    /** @return array{status: string, message: string, metadata: array<string, mixed>} */
+    public function verifyPackage(Server $server, int $packageId): array
+    {
+        $package = MinecraftToolkitPackage::query()
+            ->whereKey($packageId)
+            ->where('server_uuid', $server->uuid)
+            ->where('managed', true)
+            ->where('enabled', true)
+            ->first();
+        if (!$package instanceof MinecraftToolkitPackage) {
+            throw new MinecraftToolkitException('Das verwaltete Paket wurde nicht gefunden.');
+        }
+
+        if ($package->file_path === '' || !$this->files->exists($server, $package->file_path)) {
+            $message = 'Die verwaltete Datei wurde nicht gefunden.';
+            $this->storeCheck($package, 'error', $message);
+            $this->log($server, 'package_verify_failed', 'error', $message, ['package_id' => $package->id]);
+
+            return ['status' => 'error', 'message' => $message, 'metadata' => []];
+        }
+
+        try {
+            $contents = $this->files->read(
+                $server,
+                $package->file_path,
+                max(1, (int) config('minecrafttoolkit.max_package_bytes', 104857600)) + 1
+            );
+            $metadata = $this->files->inspectJarContents($contents);
+            $this->assertStoredPackageHashesMatch($package, $metadata);
+
+            if ($package->source !== 'geysermc') {
+                $this->assertDownloadedPackageMatchesCandidate($package, [
+                    'version_number' => (string) ($package->version_number ?? ''),
+                ], $metadata);
+            }
+
+            $message = sprintf(
+                'Datei verifiziert. SHA-512: %s, Groesse: %d Bytes.',
+                substr((string) $metadata['sha512'], 0, 16) . '...',
+                (int) $metadata['size']
+            );
+            $this->storeCheck($package, 'verified', $message);
+            $this->log($server, 'package_verified', 'success', $message, [
+                'package_id' => $package->id,
+                'sha1' => $metadata['sha1'],
+                'sha512' => $metadata['sha512'],
+                'size' => $metadata['size'],
+                'plugin_version' => $metadata['plugin_version'],
+                'class_major_version' => $metadata['class_major_version'],
+            ]);
+
+            return ['status' => 'verified', 'message' => $message, 'metadata' => $metadata];
+        } catch (MinecraftToolkitException $exception) {
+            $this->storeCheck($package, 'error', $exception->getMessage());
+            $this->log($server, 'package_verify_failed', 'error', $exception->getMessage(), [
+                'package_id' => $package->id,
+            ]);
+
+            return ['status' => 'error', 'message' => $exception->getMessage(), 'metadata' => []];
+        } catch (\Throwable $exception) {
+            report($exception);
+            $message = 'Die Paketverifikation ist technisch fehlgeschlagen.';
+            $this->storeCheck($package, 'error', $message);
+            $this->log($server, 'package_verify_failed', 'error', $message, ['package_id' => $package->id]);
+
+            return ['status' => 'error', 'message' => $message, 'metadata' => []];
+        }
     }
 
 
@@ -843,6 +968,26 @@ class MinecraftUpdateService
         if (!$this->versionsEquivalent($downloadedVersion, $expected)) {
             throw new MinecraftToolkitException(
                 "Die heruntergeladene Datei enthält Version $downloadedVersion, erwartet wurde aber $expected. Das Update wurde abgebrochen, weil die Quelle eine falsche/alte Datei geliefert hat."
+            );
+        }
+    }
+
+    /** @param array<string, mixed> $metadata */
+    private function assertStoredPackageHashesMatch(MinecraftToolkitPackage $package, array $metadata): void
+    {
+        $storedSha512 = trim((string) ($package->sha512 ?? ''));
+        if ($storedSha512 !== ''
+            && !hash_equals(strtolower($storedSha512), strtolower((string) ($metadata['sha512'] ?? '')))) {
+            throw new MinecraftToolkitException(
+                'Die installierte Datei stimmt nicht mit der gespeicherten SHA-512-Pruefsumme ueberein.'
+            );
+        }
+
+        $storedSha1 = trim((string) ($package->sha1 ?? ''));
+        if ($storedSha1 !== ''
+            && !hash_equals(strtolower($storedSha1), strtolower((string) ($metadata['sha1'] ?? '')))) {
+            throw new MinecraftToolkitException(
+                'Die installierte Datei stimmt nicht mit der gespeicherten SHA-1-Pruefsumme ueberein.'
             );
         }
     }

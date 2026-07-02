@@ -22,6 +22,12 @@
 
     @if ($candidate)
         <x-filament::section :heading="trans('minecrafttoolkit::strings.installer.review_install')">
+            @php
+                $selectedFile = $candidate['version']['selected_file'] ?? [];
+                $hashes = is_array($selectedFile['hashes'] ?? null) ? $selectedFile['hashes'] : [];
+                $fileSize = (int) ($selectedFile['size'] ?? 0);
+                $categories = array_slice(array_filter($candidate['project']['categories'] ?? []), 0, 8);
+            @endphp
             <div class="space-y-5">
                 <div class="flex items-start gap-4">
                     @if ($candidate['project']['icon_url'])
@@ -34,6 +40,49 @@
                             {{ trans('minecrafttoolkit::strings.installer.version') }}: <strong>{{ $candidate['version']['version_number'] }}</strong>
                             · {{ trans('minecrafttoolkit::strings.installer.file') }}: <code>{{ $candidate['version']['selected_file']['filename'] }}</code>
                         </p>
+                        <div class="mt-3 flex flex-wrap gap-2 text-xs text-gray-500">
+                            @if (!empty($candidate['project']['project_url']))
+                                <a href="{{ $candidate['project']['project_url'] }}" target="_blank" rel="noopener noreferrer" class="text-primary-600 hover:underline">
+                                    {{ trans('minecrafttoolkit::strings.installer.project_page') }}
+                                </a>
+                            @endif
+                            @if (!empty($candidate['version']['date_published']))
+                                <span>{{ trans('minecrafttoolkit::strings.installer.published') }}: {{ substr((string) $candidate['version']['date_published'], 0, 10) }}</span>
+                            @elseif (!empty($candidate['project']['updated_at']))
+                                <span>{{ trans('minecrafttoolkit::strings.installer.updated') }}: {{ substr((string) $candidate['project']['updated_at'], 0, 10) }}</span>
+                            @endif
+                            @if ($fileSize > 0)
+                                <span>{{ trans('minecrafttoolkit::strings.installer.file_size') }}: {{ number_format($fileSize / 1024 / 1024, 2) }} MiB</span>
+                            @endif
+                        </div>
+                        @if ($categories !== [])
+                            <div class="mt-2 flex flex-wrap gap-1">
+                                @foreach ($categories as $category)
+                                    <span class="rounded border border-gray-200 px-2 py-0.5 text-xs text-gray-500 dark:border-white/10">{{ $category }}</span>
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
+                </div>
+
+                <div class="grid gap-3 md:grid-cols-2">
+                    <div class="rounded-lg border border-gray-200 p-3 text-sm dark:border-white/10">
+                        <div class="font-medium">{{ trans('minecrafttoolkit::strings.installer.file_integrity') }}</div>
+                        <div class="mt-2 space-y-1 text-xs text-gray-500">
+                            @forelse ($hashes as $name => $hash)
+                                <div><span class="uppercase">{{ $name }}</span>: <code>{{ substr((string) $hash, 0, 32) }}{{ strlen((string) $hash) > 32 ? '...' : '' }}</code></div>
+                            @empty
+                                <div>{{ trans('minecrafttoolkit::strings.installer.no_hashes') }}</div>
+                            @endforelse
+                        </div>
+                    </div>
+                    <div class="rounded-lg border border-gray-200 p-3 text-sm dark:border-white/10">
+                        <div class="font-medium">{{ trans('minecrafttoolkit::strings.installer.compatibility_summary') }}</div>
+                        <div class="mt-2 space-y-1 text-xs text-gray-500">
+                            <div>{{ trans('minecrafttoolkit::strings.installer.source') }}: {{ ucfirst((string) ($candidate['source'] ?? $this->sourceLabel())) }}</div>
+                            <div>{{ trans('minecrafttoolkit::strings.installer.server_side') }}: {{ $candidate['project']['server_side'] ?? 'unknown' }}</div>
+                            <div>{{ trans('minecrafttoolkit::strings.installer.dependencies') }}: {{ count($candidate['dependencies']) }}</div>
+                        </div>
                     </div>
                 </div>
 
@@ -92,6 +141,9 @@
                                 <div class="min-w-0">
                                     <h3 class="truncate font-semibold">{{ $result['title'] }}</h3>
                                     <p class="truncate text-xs text-gray-500">{{ $result['author'] }} · {{ number_format($result['downloads']) }} {{ trans('minecrafttoolkit::strings.installer.downloads') }}</p>
+                                    @if (!empty($result['categories']))
+                                        <p class="mt-1 truncate text-xs text-gray-400">{{ implode(' | ', array_slice($result['categories'], 0, 4)) }}</p>
+                                    @endif
                                 </div>
                                 <x-filament::button size="sm" wire:click="selectProject('{{ $result['project_id'] }}')" wire:loading.attr="disabled">
                                     {{ trans('minecrafttoolkit::strings.installer.check') }}

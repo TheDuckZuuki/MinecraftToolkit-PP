@@ -9,7 +9,9 @@ use BackedEnum;
 use BlueWolf\MinecraftToolkit\Models\MinecraftToolkitLog;
 use BlueWolf\MinecraftToolkit\Models\MinecraftToolkitPackage;
 use BlueWolf\MinecraftToolkit\Models\MinecraftToolkitSetup;
+use BlueWolf\MinecraftToolkit\Services\CurseForgeService;
 use BlueWolf\MinecraftToolkit\Services\MinecraftPermissionService;
+use BlueWolf\MinecraftToolkit\Services\MinecraftServerFileService;
 use Filament\Facades\Filament;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Schema;
@@ -30,6 +32,10 @@ class MinecraftOverviewPage extends Page
     public ?MinecraftToolkitSetup $setup = null;
 
     public array $logs = [];
+
+    public array $backups = [];
+
+    public array $sourceStatuses = [];
 
     public int $packageCount = 0;
 
@@ -54,6 +60,24 @@ class MinecraftOverviewPage extends Page
                 ->get()
                 ->all()
             : [];
+        $this->backups = app(MinecraftServerFileService::class)->listBackups($server);
+        $this->sourceStatuses = [
+            [
+                'name' => 'Modrinth',
+                'enabled' => (bool) config('minecrafttoolkit.modrinth_enabled', true),
+                'detail' => (bool) config('minecrafttoolkit.modrinth_enabled', true) ? 'enabled' : 'disabled',
+            ],
+            [
+                'name' => 'CurseForge',
+                'enabled' => app(CurseForgeService::class)->isConfigured(),
+                'detail' => app(CurseForgeService::class)->keySource() ?? 'not configured',
+            ],
+            [
+                'name' => 'Crossplay',
+                'enabled' => (bool) config('minecrafttoolkit.crossplay_enabled', true),
+                'detail' => (bool) config('minecrafttoolkit.crossplay_enabled', true) ? 'enabled' : 'disabled',
+            ],
+        ];
     }
 
     public static function canAccess(): bool

@@ -185,9 +185,14 @@ class MinecraftSoftwareService
             'forge' => $this->forgeMinecraftVersions($this->mavenVersions(
                 'https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml'
             ), $this->forgePromotionVersions()),
-            'neoforge' => $this->neoForgeMinecraftVersions($this->mavenVersions(
-                'https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml'
-            )),
+            'neoforge' => array_values(array_unique(array_merge(
+                $this->forgeMinecraftVersions($this->mavenVersions(
+                    'https://maven.neoforged.net/releases/net/neoforged/forge/maven-metadata.xml'
+                )),
+                $this->neoForgeMinecraftVersions($this->mavenVersions(
+                    'https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml'
+                ))
+            ))),
             default => [],
         };
     }
@@ -202,15 +207,22 @@ class MinecraftSoftwareService
                 ->values()
                 ->all(),
             'forge' => $this->forgeLoaderVersions($minecraftVersion),
-            'neoforge' => collect($this->mavenVersions(
-                'https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml'
-            ))
-                ->filter(fn (string $version): bool => str_starts_with(
-                    $version,
-                    $this->neoForgePrefix($minecraftVersion)
+            'neoforge' => array_values(array_unique(array_merge(
+                collect($this->mavenVersions(
+                    'https://maven.neoforged.net/releases/net/neoforged/forge/maven-metadata.xml'
                 ))
-                ->values()
-                ->all(),
+                    ->filter(fn (string $version): bool => str_starts_with($version, "$minecraftVersion-"))
+                    ->map(fn (string $version): string => substr($version, strlen($minecraftVersion) + 1))
+                    ->values()
+                    ->all(),
+                collect($this->mavenVersions(
+                    'https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml'
+                ))
+                    ->filter(fn (string $version): bool => collect($this->neoForgePrefixes($minecraftVersion))
+                        ->contains(fn (string $prefix): bool => str_starts_with($version, $prefix)))
+                    ->values()
+                    ->all()
+            ))),
             default => [],
         };
     }
@@ -351,8 +363,11 @@ class MinecraftSoftwareService
     /** @return array{url: string, source: string, version_id: string, file_name: string, startup: string, installer: bool, sha256: string} */
     private function resolveNeoForge(string $minecraftVersion, string $loaderVersion): array
     {
-        $marker = ".minecraft-toolkit/neoforge-$loaderVersion.installed";
-        $url = "https://maven.neoforged.net/releases/net/neoforged/neoforge/$loaderVersion/neoforge-$loaderVersion-installer.jar";
+        $legacy = $minecraftVersion === '1.20.1' && str_starts_with($loaderVersion, '47.');
+        $artifactVersion = $legacy ? "$minecraftVersion-$loaderVersion" : $loaderVersion;
+        $artifact = $legacy ? 'forge' : 'neoforge';
+        $marker = ".minecraft-toolkit/neoforge-$artifactVersion.installed";
+        $url = "https://maven.neoforged.net/releases/net/neoforged/$artifact/$artifactVersion/$artifact-$artifactVersion-installer.jar";
 
         return [
             'url' => $url,
@@ -466,13 +481,13 @@ class MinecraftSoftwareService
                     return null;
                 }
 
-                if ((int) $match[1] < 26) {
-                    return $match[2] === '0'
-                        ? '1.' . $match[1]
-                        : '1.' . $match[1] . '.' . $match[2];
+                if ((int) $match[1] >= 26) {
+                    return $match[1] . '.' . $match[2];
                 }
 
-                return $match[1] . '.' . $match[2] . (isset($match[3]) ? '.' . $match[3] : '');
+                return $match[2] === '0'
+                    ? '1.' . $match[1]
+                    : '1.' . $match[1] . '.' . $match[2];
             })
             ->filter()
             ->unique()
@@ -482,9 +497,15 @@ class MinecraftSoftwareService
 
     public function neoForgePrefix(string $minecraftVersion): string
     {
+        return $this->neoForgePrefixes($minecraftVersion)[0] ?? '';
+    }
+
+    /** @return string[] */
+    public function neoForgePrefixes(string $minecraftVersion): array
+    {
         return str_starts_with($minecraftVersion, '1.')
-            ? substr($minecraftVersion, 2) . '.'
-            : $minecraftVersion . '.';
+            ? [substr($minecraftVersion, 2) . '.']
+            : [$minecraftVersion . '.'];
     }
 
     /** @return string[] */

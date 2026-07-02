@@ -63,6 +63,11 @@ class MinecraftInstallerPage extends Page implements HasSchemas
         $this->form->fill([
             'source' => array_key_first($this->usableSourceOptions()),
             'query' => '',
+            'category_filter' => '',
+            'author_filter' => '',
+            'server_side_filter' => '',
+            'min_downloads' => null,
+            'sort' => 'source',
         ]);
         $this->refreshInstalledPackages();
         $this->loadFeatured();
@@ -138,6 +143,35 @@ class MinecraftInstallerPage extends Page implements HasSchemas
                             : trans('minecrafttoolkit::strings.installer.project_placeholder'))
                         ->maxLength(100)
                         ->helperText(trans('minecrafttoolkit::strings.installer.search_help')),
+                    TextInput::make('category_filter')
+                        ->label(trans('minecrafttoolkit::strings.installer.category_filter'))
+                        ->placeholder(trans('minecrafttoolkit::strings.installer.category_placeholder'))
+                        ->maxLength(60),
+                    TextInput::make('author_filter')
+                        ->label(trans('minecrafttoolkit::strings.installer.author_filter'))
+                        ->placeholder(trans('minecrafttoolkit::strings.installer.author_placeholder'))
+                        ->maxLength(60),
+                    Select::make('server_side_filter')
+                        ->label(trans('minecrafttoolkit::strings.installer.server_side_filter'))
+                        ->options([
+                            '' => trans('minecrafttoolkit::strings.installer.any'),
+                            'required' => trans('minecrafttoolkit::strings.installer.server_required'),
+                            'optional' => trans('minecrafttoolkit::strings.installer.server_optional'),
+                            'unknown' => trans('minecrafttoolkit::strings.installer.server_unknown'),
+                        ]),
+                    TextInput::make('min_downloads')
+                        ->label(trans('minecrafttoolkit::strings.installer.min_downloads'))
+                        ->numeric()
+                        ->minValue(0),
+                    Select::make('sort')
+                        ->label(trans('minecrafttoolkit::strings.installer.sort'))
+                        ->options([
+                            'source' => trans('minecrafttoolkit::strings.installer.sort_source'),
+                            'downloads' => trans('minecrafttoolkit::strings.installer.sort_downloads'),
+                            'updated' => trans('minecrafttoolkit::strings.installer.sort_updated'),
+                            'name' => trans('minecrafttoolkit::strings.installer.sort_name'),
+                        ])
+                        ->default('source'),
                 ]),
         ];
     }
@@ -169,7 +203,8 @@ class MinecraftInstallerPage extends Page implements HasSchemas
     private function runSearch(bool $forcePopular = false): void
     {
         try {
-            $query = trim((string) ($this->form->getState()['query'] ?? ''));
+            $state = $this->form->getState();
+            $query = trim((string) ($state['query'] ?? ''));
             $source = $this->selectedSource();
             $this->candidate = null;
             $offset = $this->resultPage * 20;
@@ -178,7 +213,7 @@ class MinecraftInstallerPage extends Page implements HasSchemas
                 ? trans('minecrafttoolkit::strings.installer.featured') . ' - ' . $this->packageLabel(true)
                 : 'Search: “' . $query . '”';
 
-            $this->results = match ($source) {
+            $this->results = $this->filterResults(match ($source) {
                 'modrinth' => $popular
                     ? app(ModrinthService::class)->popularPackages($this->setup(), $offset)
                     : app(ModrinthService::class)->searchPackages($query, $this->setup()),
@@ -186,7 +221,7 @@ class MinecraftInstallerPage extends Page implements HasSchemas
                     ? app(CurseForgeService::class)->popularPackages($this->setup(), $offset)
                     : app(CurseForgeService::class)->searchPackages($query, $this->setup()),
                 default => throw new MinecraftToolkitException(trans('minecrafttoolkit::strings.installer.invalid_source')),
-            };
+            }, $state);
 
             if ($this->results === []) {
                 Notification::make()
@@ -270,6 +305,52 @@ class MinecraftInstallerPage extends Page implements HasSchemas
         } catch (MinecraftToolkitException $exception) {
             $this->notifyError(trans('minecrafttoolkit::strings.installer.install_failed', ['package' => $this->packageLabel()]), $exception);
         }
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $results
+     * @param array<string, mixed> $state
+     * @return array<int, array<string, mixed>>
+     */
+    private function filterResults(array $results, array $state): array
+    {
+        $category = mb_strtolower(trim((string) ($state['category_filter'] ?? '')));
+        $author = mb_strtolower(trim((string) ($state['author_filter'] ?? '')));
+        $serverSide = (string) ($state['server_side_filter'] ?? '');
+        $minDownloads = max(0, (int) ($state['min_downloads'] ?? 0));
+        $sort = (string) ($state['sort'] ?? 'source');
+
+        $filtered = collect($results)
+            ->filter(function (array $result) use ($category, $author, $serverSide, $minDownloads): bool {
+                if ($category !== '') {
+                    $categories = array_map(
+                        fn (mixed $value): string => mb_strtolower((string) $value),
+                        is_array($result['categories'] ?? null) ? $result['categories'] : []
+                    );
+                    if (!collect($categories)->contains(fn (string $value): bool => str_contains($value, $category))) {
+                        return false;
+                    }
+                }
+
+                if ($author !== '' && !str_contains(mb_strtolower((string) ($result['author'] ?? '')), $author)) {
+                    return false;
+                }
+
+                if ($serverSide !== '' && (string) ($result['server_side'] ?? 'unknown') !== $serverSide) {
+                    return false;
+                }
+
+                return (int) ($result['downloads'] ?? 0) >= $minDownloads;
+            });
+
+        $filtered = match ($sort) {
+            'downloads' => $filtered->sortByDesc(fn (array $result): int => (int) ($result['downloads'] ?? 0)),
+            'updated' => $filtered->sortByDesc(fn (array $result): string => (string) ($result['updated_at'] ?? '')),
+            'name' => $filtered->sortBy(fn (array $result): string => mb_strtolower((string) ($result['title'] ?? ''))),
+            default => $filtered,
+        };
+
+        return $filtered->values()->all();
     }
 
     private function setup(): MinecraftToolkitSetup

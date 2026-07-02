@@ -31,11 +31,15 @@ return [
     'bedrock_download_version' => env('MINECRAFT_TOOLKIT_BEDROCK_DOWNLOAD_VERSION', '1.26.23.1'),
     'http_timeout' => max(5, (int) env('MINECRAFT_TOOLKIT_HTTP_TIMEOUT', 20)),
     'download_timeout' => max(30, (int) env('MINECRAFT_TOOLKIT_DOWNLOAD_TIMEOUT', 300)),
+    'block_private_download_ips' => $boolean(env('MINECRAFT_TOOLKIT_BLOCK_PRIVATE_DOWNLOAD_IPS', true), true),
+    'hash_required' => $boolean(env('MINECRAFT_TOOLKIT_HASH_REQUIRED', false), false),
     // Java 21 supports class file version 65. Set to 0 to disable this safety check.
     'java_class_version_max' => (int) env('MINECRAFT_TOOLKIT_JAVA_CLASS_VERSION_MAX', 65),
     'max_icon_bytes' => max(65536, (int) env('MINECRAFT_TOOLKIT_MAX_ICON_BYTES', 2097152)),
     'max_package_bytes' => max(1048576, (int) env('MINECRAFT_TOOLKIT_MAX_PACKAGE_BYTES', 104857600)),
-    'user_agent' => env('MINECRAFT_TOOLKIT_USER_AGENT', 'BlueIT-MinecraftToolkit/1.2.1'),
+    'max_jar_entries' => max(100, (int) env('MINECRAFT_TOOLKIT_MAX_JAR_ENTRIES', 20000)),
+    'max_jar_entry_bytes' => max(1048576, (int) env('MINECRAFT_TOOLKIT_MAX_JAR_ENTRY_BYTES', 52428800)),
+    'user_agent' => env('MINECRAFT_TOOLKIT_USER_AGENT', 'BlueIT-MinecraftToolkit/1.3.0'),
     'bedrock_fallback_versions' => array_values(array_filter(array_map('trim', explode(',', (string) env('MINECRAFT_TOOLKIT_BEDROCK_FALLBACK_VERSIONS', 'latest,1.26.23.1'))))),
     'fallback_versions' => [
         '1.21.11',
