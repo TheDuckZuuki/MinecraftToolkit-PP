@@ -19,8 +19,8 @@ class MinecraftServerStateService
         if (!in_array($state, ['offline', 'exited', 'dead', 'created'], true)) {
             throw new MinecraftToolkitException(
                 $state === 'missing'
-                    ? 'Wings ist nicht erreichbar oder der Server fehlt auf dem Node.'
-                    : 'Der Server muss gestoppt sein, bevor diese Aktion fortgesetzt werden kann.'
+                    ? 'Wings is unreachable, or the server is missing from the node.'
+                    : 'The server must be stopped before this action can continue.'
             );
         }
     }
