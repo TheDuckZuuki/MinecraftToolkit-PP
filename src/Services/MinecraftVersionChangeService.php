@@ -36,17 +36,17 @@ class MinecraftVersionChangeService
         string $mode
     ): array {
         if (!in_array($mode, ['safe', 'remove', 'risk'], true)) {
-            throw new MinecraftToolkitException('Die gewählte Wechselstrategie ist ungültig.');
+            throw new MinecraftToolkitException('The selected switching strategy is invalid.');
         }
         if ($minecraftVersion === $setup->minecraft_version
             && ($loaderVersion ?? null) === ($setup->loader_version ?? null)) {
-            throw new MinecraftToolkitException('Wähle eine andere Minecraft- oder Loader-Version.');
+            throw new MinecraftToolkitException('Select a different version of Minecraft or the loader.');
         }
 
         /** @var Lock $lock */
         $lock = Cache::lock("minecrafttoolkit.version-change.{$server->uuid}", 1200);
         if (!$lock->get()) {
-            throw new MinecraftToolkitException('Für diesen Server läuft bereits ein Versionswechsel.');
+            throw new MinecraftToolkitException('A version update is already in progress for this server.');
         }
 
         try {
@@ -57,7 +57,7 @@ class MinecraftVersionChangeService
             $report = $this->compatibility->check($server, $setup, $minecraftVersion, $loaderVersion);
             if ($mode === 'safe' && $report['blocking'] > 0) {
                 throw new MinecraftToolkitException(
-                    'Der sichere Wechsel ist blockiert. Entferne inkompatible Pakete oder bestätige den Risikomodus.'
+                    'The safe upgrade is blocked. Remove incompatible packages or confirm risk mode.'
                 );
             }
 
@@ -68,14 +68,14 @@ class MinecraftVersionChangeService
                 ->first();
             if (!$serverPackage instanceof MinecraftToolkitPackage) {
                 throw new MinecraftToolkitException(
-                    'Die verwaltete Serverdatei wurde nicht gefunden. Führe das Minecraft-Setup erneut aus.'
+                    'The managed server file was not found. Run the Minecraft setup again.'
                 );
             }
             $oldArtifact = $serverPackage->file_path;
             $newArtifact = '/' . $download['file_name'];
             if ($newArtifact !== $oldArtifact && $this->files->exists($server, $newArtifact)) {
                 throw new MinecraftToolkitException(
-                    "Die neue Serverdatei {$download['file_name']} existiert bereits."
+                    "The new server file {$download['file_name']} already exists."
                 );
             }
 
@@ -170,7 +170,7 @@ class MinecraftVersionChangeService
             }
 
             $this->log($server, 'minecraft_version_changed', $failed > 0 ? 'warning' : 'success', sprintf(
-                'Minecraft wurde von %s auf %s gewechselt. Pakete aktualisiert: %d, gesichert: %d, fehlgeschlagen: %d.',
+                'Minecraft was upgraded from %s to %s. Packages updated: %d, saved: %d, failed: %d.',
                 $oldMinecraftVersion,
                 $minecraftVersion,
                 $updated,
@@ -195,7 +195,7 @@ class MinecraftVersionChangeService
         } catch (\Throwable $exception) {
             report($exception);
             throw new MinecraftToolkitException(
-                'Der Versionswechsel ist technisch fehlgeschlagen. Prüfe die Backups und das Laravel-Log.',
+                'The version update failed for technical reasons. Check the backups and the Laravel log.',
                 previous: $exception
             );
         } finally {
@@ -210,7 +210,7 @@ class MinecraftVersionChangeService
         ?string $loaderVersion
     ): array {
         if (!array_key_exists($minecraftVersion, $this->software->versionOptions($setup->software))) {
-            throw new MinecraftToolkitException('Die gewählte Minecraft-Version ist für diese Software nicht verfügbar.');
+            throw new MinecraftToolkitException('The selected version of Minecraft is not available for this software.');
         }
 
         return $this->software->resolveInstallation($setup->software, $minecraftVersion, $loaderVersion);
@@ -265,7 +265,7 @@ class MinecraftVersionChangeService
                 $removed++;
             } catch (\Throwable $exception) {
                 report($exception);
-                $errors[] = "{$package->project_name}: Das Paket konnte nicht gesichert und deaktiviert werden.";
+                $errors[] = "{$package->project_name}: The package could not be secured or deactivated.";
             }
         }
 
@@ -310,7 +310,7 @@ class MinecraftVersionChangeService
             && $server->owner_id !== $user->id
             && !$user->can(SubuserPermission::StartupUpdate, $server))) {
             throw new MinecraftToolkitException(
-                'Für diesen Versionswechsel wird die Berechtigung zum Ändern des Startbefehls benötigt.'
+                'To perform this version update, you need permission to change the startup command.'
             );
         }
     }
