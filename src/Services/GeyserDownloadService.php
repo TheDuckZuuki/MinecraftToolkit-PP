@@ -16,7 +16,7 @@ class GeyserDownloadService
     public function latestSpigot(string $project): array
     {
         if (!in_array($project, ['geyser', 'floodgate'], true)) {
-            throw new MinecraftToolkitException('Unbekanntes GeyserMC-Projekt.');
+            throw new MinecraftToolkitException('Unknown GeyserMC project.');
         }
 
         return Cache::remember(
@@ -26,7 +26,7 @@ class GeyserDownloadService
                 $metadata = $this->get("/projects/$project");
                 $version = collect($metadata['versions'] ?? [])->last();
                 if (!is_string($version)) {
-                    throw new MinecraftToolkitException("Für $project wurde keine Version gefunden.");
+                    throw new MinecraftToolkitException("No version was found for $project.");
                 }
 
                 $build = $this->get("/projects/$project/versions/$version/builds/latest");
@@ -36,7 +36,7 @@ class GeyserDownloadService
                     || !is_array($download)
                     || !is_string($download['name'] ?? null)
                     || !is_string($download['sha256'] ?? null)) {
-                    throw new MinecraftToolkitException("Für $project wurde kein Spigot-Download gefunden.");
+                    throw new MinecraftToolkitException("No Spigot download was found for $project.");
                 }
 
                 return [
@@ -67,7 +67,7 @@ class GeyserDownloadService
         } catch (\Throwable $exception) {
             report($exception);
             throw new MinecraftToolkitException(
-                'GeyserMC ist derzeit nicht erreichbar. Versuche es später erneut.',
+                'GeyserMC is currently unavailable. Please try again later.',
                 previous: $exception
             );
         }
