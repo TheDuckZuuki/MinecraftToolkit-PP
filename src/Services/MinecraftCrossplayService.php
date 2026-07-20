@@ -75,7 +75,7 @@ class MinecraftCrossplayService
         ])->save();
 
         $configured = $this->applyConfigIfPresent($server, $setup->refresh());
-        $this->log($server, 'crossplay_installed', 'success', 'Geyser und Floodgate wurden installiert.', [
+        $this->log($server, 'crossplay_installed', 'success', 'Geyser and Floodgate have been installed.', [
             'bedrock_port' => $allocation->port,
             'config_applied' => $configured,
         ]);
@@ -89,11 +89,11 @@ class MinecraftCrossplayService
         $this->state->assertOffline($server);
         if (!$this->applyConfigIfPresent($server, $setup)) {
             throw new MinecraftToolkitException(
-                'Geysers config.yml existiert noch nicht. Starte den Server einmal und versuche es danach erneut.'
+                'Geysers config.yml does not exist yet. Start the server once, and then try again.'
             );
         }
 
-        $this->log($server, 'crossplay_configured', 'success', 'Geyser wurde auf Floodgate-Authentifizierung konfiguriert.');
+        $this->log($server, 'crossplay_configured', 'success', 'Geyser has been configured for Floodgate authentication.');
     }
 
     public function patchConfig(string $yaml, int $bedrockPort, ?string $motd = null): string
@@ -124,13 +124,13 @@ class MinecraftCrossplayService
 
         if (!$allocation instanceof Allocation) {
             throw new MinecraftToolkitException(
-                'Wähle eine zusätzliche Allocation für den Bedrock-UDP-Port.'
+                'Select an additional allocation for the Bedrock UDP port.'
             );
         }
         if ($allocation->id === $server->allocation_id
             && (bool) config('minecrafttoolkit.bedrock_port_required', true)) {
             throw new MinecraftToolkitException(
-                'Wähle eine zusätzliche Allocation für den Bedrock-UDP-Port.'
+                'Select an additional allocation for the Bedrock UDP port.'
             );
         }
 
@@ -232,7 +232,7 @@ class MinecraftCrossplayService
     {
         if (!(bool) config('minecrafttoolkit.crossplay_enabled', true)
             || !in_array($setup->software, ['paper', 'purpur'], true)) {
-            throw new MinecraftToolkitException('Crossplay wird nur für Paper und Purpur unterstützt.');
+            throw new MinecraftToolkitException('Cross-play is supported only for Paper and Purpur.');
         }
     }
 
