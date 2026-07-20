@@ -343,11 +343,11 @@ class MinecraftSetupPage extends Page implements HasSchemas
                                 };
 
                                 return sprintf(
-                                    '%s %s wird über %s eingerichtet. Port %s kommt aus der primären Allocation; vorhandene Zieldateien werden gesichert.',
+                                    '%s %s will be set up via %s. Port %s comes from the primary allocation; existing target files will be backed up.',
                                     app(MinecraftSoftwareService::class)->supportedSoftware()[$software] ?? 'Minecraft',
                                     trim(($get('minecraft_version') ?: '') . ' ' . ($get('loader_version') ?: '')),
                                     $artifact,
-                                    Filament::getTenant()?->allocation?->port ?? 'fehlt'
+                                    Filament::getTenant()?->allocation?->port ?? 'missing'
                                 );
                             })
                             ->schema([
@@ -384,8 +384,8 @@ class MinecraftSetupPage extends Page implements HasSchemas
             Notification::make()
                 ->title(trans('minecrafttoolkit::strings.setup.complete'))
                 ->body($usesBootstrapInstaller
-                    ? 'Der Loader-Installer liegt bereit. Beim ersten Start werden die Laufzeitdateien erzeugt; das kann einige Minuten dauern.'
-                    : 'Serversoftware, eula.txt und server.properties wurden über Wings eingerichtet.')
+                    ? 'The loader installer is ready. Runtime files will be generated on first start; this may take several minutes.'
+                    : 'Server software, eula.txt, and server.properties were set up via Wings.')
                 ->success()
                 ->send();
 
