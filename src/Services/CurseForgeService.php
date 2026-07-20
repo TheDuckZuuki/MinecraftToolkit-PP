@@ -28,7 +28,7 @@ class CurseForgeService
         $this->assertEnabled();
         $query = trim($query);
         if (mb_strlen($query) < 2) {
-            throw new MinecraftToolkitException('Die Suche muss mindestens zwei Zeichen enthalten.');
+            throw new MinecraftToolkitException('The search must contain at least two characters.');
         }
 
         $params = $this->searchParameters($setup) + [
@@ -77,7 +77,7 @@ class CurseForgeService
     {
         $this->assertEnabled();
         if (!ctype_digit($projectId) || (int) $projectId <= 0) {
-            throw new MinecraftToolkitException('Die CurseForge-Projektkennung ist ungültig.');
+            throw new MinecraftToolkitException('The CurseForge project ID is invalid.');
         }
 
         $project = $this->project((int) $projectId);
@@ -97,7 +97,7 @@ class CurseForgeService
         if (!is_array($file)
             || !is_string($file['fileName'] ?? null)
             || strtolower(pathinfo($file['fileName'], PATHINFO_EXTENSION)) !== 'jar') {
-            throw new MinecraftToolkitException('Keine kompatible CurseForge-JAR wurde gefunden.');
+            throw new MinecraftToolkitException('No compatible CurseForge JAR was found.');
         }
 
         $downloadUrl = is_string($file['downloadUrl'] ?? null) ? $file['downloadUrl'] : null;
@@ -107,7 +107,7 @@ class CurseForgeService
         }
         if ($downloadUrl === null) {
             throw new MinecraftToolkitException(
-                'CurseForge stellt für diese Datei keine API-Download-URL bereit.'
+                'CurseForge does not provide an API download URL for this file.'
             );
         }
 
@@ -129,7 +129,7 @@ class CurseForgeService
             ],
             'dependencies' => $this->dependencyDetails($file),
             'warning' => in_array($setup->software, ['fabric', 'forge', 'neoforge'], true)
-                ? 'CurseForge liefert keine verlässliche Client-/Server-Seite. Prüfe die Projektbeschreibung vor der Installation.'
+                ? 'CurseForge does not provide a reliable client/server solution. Check the project description before installing.'
                 : null,
         ];
     }
@@ -297,7 +297,7 @@ class CurseForgeService
         return [
             'project_id' => (string) ($project['id'] ?? ''),
             'slug' => (string) ($project['slug'] ?? $project['id'] ?? ''),
-            'title' => (string) ($project['name'] ?? 'Unbekanntes Projekt'),
+            'title' => (string) ($project['name'] ?? 'Unknown Project'),
             'description' => (string) ($project['summary'] ?? ''),
             'icon_url' => is_string($project['logo']['thumbnailUrl'] ?? null)
                 ? $project['logo']['thumbnailUrl']
@@ -328,7 +328,7 @@ class CurseForgeService
                 : $this->directRequest($path, $query);
 
             if (!is_array($response)) {
-                throw new MinecraftToolkitException('CurseForge hat eine ungültige Antwort geliefert.');
+                throw new MinecraftToolkitException('CurseForge returned an invalid response.');
             }
 
             return $response;
@@ -341,7 +341,7 @@ class CurseForgeService
                 'mode' => $this->usesProxy() ? 'proxy' : 'direct',
             ]);
             throw new MinecraftToolkitException(
-                'CurseForge ist derzeit nicht erreichbar. Versuche es später erneut.',
+                'CurseForge is currently unavailable. Please try again later.',
                 previous: $exception
             );
         }
@@ -410,12 +410,12 @@ class CurseForgeService
     private function assertEnabled(): void
     {
         if (!(bool) config('minecrafttoolkit.curseforge_enabled', false)) {
-            throw new MinecraftToolkitException('CurseForge ist in den Plugin-Einstellungen deaktiviert.');
+            throw new MinecraftToolkitException('CurseForge is disabled in the plugin settings.');
         }
 
         if (!$this->usesProxy() && !$this->apiKeyProvider->hasKey()) {
             throw new MinecraftToolkitException(
-                'CurseForge ist deaktiviert, weil weder ein Toolkit-Proxy noch ein lokaler CurseForge API-Key konfiguriert ist.'
+                'CurseForge is disabled because neither a Toolkit proxy nor a local CurseForge API key has been configured.'
             );
         }
     }
@@ -440,7 +440,7 @@ class CurseForgeService
         $key = $this->apiKeyProvider->getKey();
         if ($key === null) {
             throw new MinecraftToolkitException(
-                'CurseForge ist deaktiviert, weil weder ein Toolkit-Proxy noch ein lokaler CurseForge API-Key konfiguriert ist.'
+                'CurseForge is disabled because neither a Toolkit proxy nor a local CurseForge API key has been configured.'
             );
         }
 
