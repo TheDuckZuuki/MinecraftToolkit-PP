@@ -49,7 +49,7 @@ class MinecraftPackageInstaller
         /** @var Lock $lock */
         $lock = Cache::lock("minecrafttoolkit.install.{$server->uuid}", 600);
         if (!$lock->get()) {
-            throw new MinecraftToolkitException('Für diesen Server läuft bereits eine Paketinstallation.');
+            throw new MinecraftToolkitException('A package installation is already running on this server.');
         }
 
         try {
@@ -74,14 +74,14 @@ class MinecraftPackageInstaller
             'paper', 'purpur', 'folia' => 'plugin',
             'fabric', 'forge', 'neoforge' => 'mod',
             default => throw new MinecraftToolkitException(
-                'Diese Serversoftware unterstützt keine Plugin- oder Mod-Installation.'
+                'This server software does not support the installation of plugins or mods.'
             ),
         };
         $targetDirectory = $packageType === 'plugin' ? 'plugins' : 'mods';
         $packageLabel = $packageType === 'plugin' ? 'Plugin' : 'Mod';
 
         if ($packageType === 'mod' && $setup->loader_version === null) {
-            throw new MinecraftToolkitException('Für diesen Mod-Server ist keine Loader-Version gespeichert.');
+            throw new MinecraftToolkitException('No loader version is saved for this mod server.');
         }
 
         $alreadyInstalled = MinecraftToolkitPackage::query()
@@ -95,12 +95,12 @@ class MinecraftPackageInstaller
                 return $alreadyInstalled;
             }
 
-            throw new MinecraftToolkitException("Dieses $packageLabel wird bereits von Minecraft Toolkit verwaltet.");
+            throw new MinecraftToolkitException("This $packageLabel is already managed by Minecraft Toolkit.");
         }
 
         $stackKey = "$source:$projectId";
         if (in_array($stackKey, $stack, true)) {
-            throw new MinecraftToolkitException('Eine Paketabhängigkeit verweist rekursiv auf sich selbst.');
+            throw new MinecraftToolkitException('A package dependency recursively references itself.');
         }
         $stack[] = $stackKey;
 
@@ -108,14 +108,14 @@ class MinecraftPackageInstaller
             $candidate = match ($source) {
                 'modrinth' => $this->modrinth->installationCandidate($projectId, $setup),
                 'curseforge' => $this->curseForge->installationCandidate($projectId, $setup),
-                default => throw new MinecraftToolkitException('Die Paketquelle wird nicht unterstützt.'),
+                default => throw new MinecraftToolkitException('The package source is not supported.'),
             };
 
             foreach ($this->requiredDependencies($candidate['dependencies'] ?? []) as $dependency) {
                 $dependencyProjectId = $dependency['project_id'] ?? null;
                 if (!is_string($dependencyProjectId) || $dependencyProjectId === '') {
                     throw new MinecraftToolkitException(
-                        "Eine Pflicht-Abhängigkeit für $projectId konnte nicht eindeutig aufgelöst werden."
+                        "A mandatory dependency for $projectId could not be resolved unambiguously."
                     );
                 }
 
@@ -129,7 +129,7 @@ class MinecraftPackageInstaller
             $path = "/$targetDirectory/$fileName";
 
             if ($this->files->exists($server, $path)) {
-                throw new MinecraftToolkitException("Die Datei $fileName existiert bereits im $targetDirectory-Ordner.");
+                throw new MinecraftToolkitException("The file $fileName already exists in the $targetDirectory folder.");
             }
 
             $metadata = $this->files->downloadJarWithMetadata(
@@ -168,7 +168,7 @@ class MinecraftPackageInstaller
                 'installed_at' => now(),
             ]);
 
-            $this->log($server, 'package_installed', 'success', "$packageLabel {$project['title']} wurde installiert.", [
+            $this->log($server, 'package_installed', 'success', "$packageLabel {$project['title']} has been installed.", [
                 'project_id' => $project['project_id'],
                 'version_id' => $version['id'],
                 'file' => $fileName,
@@ -179,7 +179,7 @@ class MinecraftPackageInstaller
         } catch (\Throwable $exception) {
             $message = $exception instanceof MinecraftToolkitException
                 ? $exception->getMessage()
-                : "Das $packageLabel konnte nicht installiert werden. Technische Details wurden protokolliert.";
+                : "The $packageLabel could not be installed. Technical details have been logged.";
             $this->log($server, 'package_install_failed', 'error', $message, ['project_id' => $projectId]);
             Log::error('Minecraft Toolkit package installation failed', [
                 'server_uuid' => $server->uuid,
@@ -203,7 +203,7 @@ class MinecraftPackageInstaller
 
         if ($this->versionBase($downloadedVersion) !== $this->versionBase($expectedVersion)) {
             throw new MinecraftToolkitException(
-                "Die heruntergeladene Datei enthält Version $downloadedVersion, erwartet wurde aber $expectedVersion. Die Installation wurde abgebrochen, weil die Quelle eine falsche/alte Datei geliefert hat."
+                "The downloaded file contains version $downloadedVersion, but $expectedVersion was expected. The installation was aborted because the source provided an incorrect or outdated file."
             );
         }
     }
@@ -241,11 +241,11 @@ class MinecraftPackageInstaller
         if (str_contains($fileName, '..')
             || str_contains($fileName, '/')
             || str_contains($fileName, '\\')) {
-            throw new MinecraftToolkitException('Der Paketdateiname ist ungültig.');
+            throw new MinecraftToolkitException('The package file name is invalid.');
         }
 
         if (!preg_match('/^[A-Za-z0-9][A-Za-z0-9._+() -]{0,199}\.jar$/i', $fileName)) {
-            throw new MinecraftToolkitException('Der Paketdateiname ist ungültig.');
+            throw new MinecraftToolkitException('The package file name is invalid.');
         }
 
         return $fileName;
