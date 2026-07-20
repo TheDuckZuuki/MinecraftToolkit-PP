@@ -144,10 +144,10 @@ class MinecraftSettingsPage extends Page implements HasSchemas
                         ->columnSpanFull(),
                     ...$this->propertyPageFields(),
                     Textarea::make('server_properties_raw')
-                        ->label('Vollständige server.properties / Rohtext')
+                        ->label('Complete server.properties / Raw text')
                         ->rows(18)
                         ->columnSpanFull()
-                        ->helperText('Erweiterte Ansicht für seltene oder zukünftige Werte. Beim Speichern werden die Felder oben in diesen Rohtext übernommen.'),
+                        ->helperText('Advanced view for rare or future values. The fields above will be incorporated into this raw text upon saving.'),
                 ]),
             Section::make('Crossplay')
                 ->description(trans('minecrafttoolkit::strings.settings_page.crossplay_desc'))
@@ -165,10 +165,10 @@ class MinecraftSettingsPage extends Page implements HasSchemas
     private function propertyPageOptions(): array
     {
         return [
-            'basic' => '1/4 Basis & Welt',
-            'access' => '2/4 Zugriff & Sicherheit',
-            'performance' => '3/4 Performance & Netzwerk',
-            'resource' => '4/4 Resource-Pack & Erweitert',
+            'basic' => '1/4 Basic & World',
+            'access' => '2/4 Access & Security',
+            'performance' => '3/4 Performance & Network',
+            'resource' => '4/4 Resource Pack & Advanced',
         ];
     }
 
@@ -354,7 +354,7 @@ class MinecraftSettingsPage extends Page implements HasSchemas
                 ->title(trans('minecrafttoolkit::strings.settings_page.save_failed'))
                 ->body($exception instanceof MinecraftToolkitException
                     ? $exception->getMessage()
-                    : 'Wings oder die Serverdatei ist derzeit nicht erreichbar.')
+                    : 'Wings or the server file is currently unavailable.')
                 ->danger()
                 ->send();
         }
@@ -373,8 +373,8 @@ class MinecraftSettingsPage extends Page implements HasSchemas
             Notification::make()
                 ->title(trans('minecrafttoolkit::strings.settings_page.crossplay_installed'))
                 ->body($configured
-                    ? 'Geyser verwendet Floodgate und den ausgewählten Bedrock-Port.'
-                    : 'Starte den Server einmal und klicke danach auf „Crossplay-Konfiguration anwenden“.')
+                    ? 'Geyser uses Floodgate and the selected Bedrock port.'
+                    : 'Start the server once and then click „Apply Crossplay Configuration“.')
                 ->success()
                 ->persistent(!$configured)
                 ->send();
@@ -389,7 +389,7 @@ class MinecraftSettingsPage extends Page implements HasSchemas
             app(MinecraftCrossplayService::class)->applyConfig($this->server(), $this->setup());
             Notification::make()
                 ->title(trans('minecrafttoolkit::strings.settings_page.crossplay_config_applied'))
-                ->body('Geyser verwendet jetzt Floodgate und den ausgewählten Bedrock-Port.')
+                ->body('Geyser now uses Floodgate and the selected Bedrock port.')
                 ->success()
                 ->send();
         } catch (MinecraftToolkitException $exception) {
