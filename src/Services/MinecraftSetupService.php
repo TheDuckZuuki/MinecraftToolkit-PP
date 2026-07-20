@@ -31,7 +31,7 @@ class MinecraftSetupService
         /** @var Lock $lock */
         $lock = Cache::lock("minecrafttoolkit.setup.{$server->uuid}", 600);
         if (!$lock->get()) {
-            throw new MinecraftToolkitException('Für diesen Server läuft bereits ein Minecraft-Setup.');
+            throw new MinecraftToolkitException('A Minecraft setup is already running on this server.');
         }
 
         try {
@@ -46,7 +46,7 @@ class MinecraftSetupService
     {
         if (!$server->allocation) {
             throw new MinecraftToolkitException(
-                'Dieser Server hat keine primäre Allocation. Ohne Server-Port kann Minecraft Toolkit keine Konfiguration erzeugen.'
+                'This server does not have a primary allocation. Without a server port, Minecraft Toolkit cannot generate a configuration.'
             );
         }
 
@@ -67,7 +67,7 @@ class MinecraftSetupService
                 'last_error' => null,
             ]
         );
-        $this->log($server, 'setup_started', 'info', 'Minecraft-Setup wurde gestartet.');
+        $this->log($server, 'setup_started', 'info', 'Minecraft-Setup was launched.');
 
         try {
             $isBedrock = (string) $data['software'] === 'bedrock';
@@ -158,19 +158,19 @@ class MinecraftSetupService
             $setupPackageFailures = $this->installSelectedSetupPackages($server, $setup->refresh(), $data['setup_package_ids'] ?? []);
             if ($setupPackageFailures !== []) {
                 $setup->forceFill([
-                    'last_error' => 'Einige ausgewählte Pakete konnten nach dem Setup nicht installiert werden: ' . implode('; ', $setupPackageFailures),
+                    'last_error' => 'Some selected packages could not be installed after setup: ' . implode('; ', $setupPackageFailures),
                 ])->save();
             }
 
             $this->log($server, 'setup_completed', $setupPackageFailures === [] ? 'success' : 'warning', $setupPackageFailures === []
-                ? 'Minecraft-Setup wurde erfolgreich abgeschlossen.'
-                : 'Minecraft-Setup wurde abgeschlossen, aber einige ausgewählte Pakete konnten nicht installiert werden.');
+                ? 'The Minecraft setup was completed successfully.'
+                : 'The Minecraft setup was completed, but some selected packages could not be installed.');
             if ($download['installer']) {
                 $this->log(
                     $server,
                     'loader_install_pending',
                     'info',
-                    'Der offizielle Loader-Installer wird beim ersten Serverstart ausgeführt.'
+                    'The official Loader installer runs when the server is started for the first time.'
                 );
             }
             if ($crossplayConfigured === false) {
@@ -178,7 +178,7 @@ class MinecraftSetupService
                     $server,
                     'crossplay_config_pending',
                     'warning',
-                    'Starte den Server einmal und wende danach die Crossplay-Konfiguration in den Settings an.'
+                    'Start the server once, and then apply the cross-play configuration in the settings.'
                 );
             }
 
@@ -186,7 +186,7 @@ class MinecraftSetupService
         } catch (\Throwable $exception) {
             $message = $exception instanceof MinecraftToolkitException
                 ? $exception->getMessage()
-                : 'Das Setup konnte nicht abgeschlossen werden. Technische Details wurden protokolliert.';
+                : 'The setup could not be completed. Technical details have been logged.';
 
             $setup->forceFill(['setup_status' => 'failed', 'last_error' => $message])->save();
             $this->log($server, 'setup_failed', 'error', $message, ['exception' => $exception::class]);
@@ -256,13 +256,13 @@ class MinecraftSetupService
                 match ($source) {
                     'modrinth' => $this->packageInstaller->installModrinthPackage($server, $setup, $projectId),
                     'curseforge' => $this->packageInstaller->installCurseForgePackage($server, $setup, $projectId),
-                    default => throw new MinecraftToolkitException('Ungültige Paketquelle.'),
+                    default => throw new MinecraftToolkitException('Invalid package source.'),
                 };
             } catch (\Throwable $exception) {
                 $failures[] = "$source:$projectId - " . ($exception instanceof MinecraftToolkitException
                     ? $exception->getMessage()
-                    : 'Technischer Fehler');
-                $this->log($server, 'setup_package_install_failed', 'warning', end($failures) ?: 'Paketinstallation fehlgeschlagen.', [
+                    : 'Technical error');
+                $this->log($server, 'setup_package_install_failed', 'warning', end($failures) ?: 'Package installation failed.', [
                     'selected_package' => $selectedPackage,
                     'exception' => $exception::class,
                 ]);
@@ -280,10 +280,10 @@ class MinecraftSetupService
 
         $contents = method_exists($icon, 'getContent') ? $icon->getContent() : null;
         if (!is_string($contents) || $contents === '') {
-            throw new MinecraftToolkitException('Das Server-Icon konnte nicht gelesen werden.');
+            throw new MinecraftToolkitException('The server icon could not be read.');
         }
         if (strlen($contents) > (int) config('minecrafttoolkit.max_icon_bytes', 2097152)) {
-            throw new MinecraftToolkitException('Das Server-Icon ist zu groß.');
+            throw new MinecraftToolkitException('The server icon is too big.');
         }
 
         $pngSignature = "\x89PNG\r\n\x1a\n";
@@ -294,7 +294,7 @@ class MinecraftSetupService
             || !is_array($dimensions)
             || $dimensions['width'] !== 64
             || $dimensions['height'] !== 64) {
-            throw new MinecraftToolkitException('Das Server-Icon muss eine 64x64 Pixel große PNG-Datei sein.');
+            throw new MinecraftToolkitException('The server icon must be a 64x64-pixel PNG file.');
         }
 
         $this->files->write($server, '/server-icon.png', $contents);
@@ -313,7 +313,7 @@ class MinecraftSetupService
             && $server->owner_id !== $user->id
             && !$user->can(SubuserPermission::StartupUpdate, $server))) {
             throw new MinecraftToolkitException(
-                'Für Modloader-Setups wird zusätzlich die Berechtigung zum Ändern des Startbefehls benötigt.'
+                'For Modloader setups, permission to modify the startup command is also required.'
             );
         }
     }
