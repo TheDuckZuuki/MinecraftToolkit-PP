@@ -88,16 +88,16 @@ class MinecraftUpdaterPage extends Page
             Notification::make()
                 ->title(trans('minecrafttoolkit::strings.updater.check_complete'))
                 ->body($available === 1
-                    ? 'Für ein Paket ist ein Update verfügbar.'
-                    : "Für $available Pakete sind Updates verfügbar.")
+                    ? 'An update is available for a package.'
+                    : "An update is available for $available packages.")
                 ->success()
                 ->send();
             $this->refreshPackages();
         } catch (MinecraftToolkitException $exception) {
-            $this->notifyError('Updateprüfung fehlgeschlagen', $exception);
+            $this->notifyError('Update check failed', $exception);
         } catch (\Throwable $exception) {
             report($exception);
-            $this->notifyUnexpectedError('Updateprüfung fehlgeschlagen');
+            $this->notifyUnexpectedError('Update check failed');
         }
     }
 
@@ -108,16 +108,16 @@ class MinecraftUpdaterPage extends Page
                 ->updatePackage($this->server(), $this->setup(), $packageId);
             Notification::make()
                 ->title(trans('minecrafttoolkit::strings.updater.package_updated', ['name' => $package->project_name]))
-                ->body("Installierte Version: {$package->version_number}")
+                ->body("Installed version: {$package->version_number}")
                 ->success()
                 ->send();
             $this->refreshPackages();
         } catch (MinecraftToolkitException $exception) {
-            $this->notifyError('Update fehlgeschlagen', $exception);
+            $this->notifyError('Update failed', $exception);
             $this->refreshPackages();
         } catch (\Throwable $exception) {
             report($exception);
-            $this->notifyUnexpectedError('Update fehlgeschlagen');
+            $this->notifyUnexpectedError('Update failed');
             $this->refreshPackages();
         }
     }
@@ -130,17 +130,17 @@ class MinecraftUpdaterPage extends Page
                 ->installMissingDependencies($this->server(), $this->setup(), $packageId);
             Notification::make()
                 ->title(trans('minecrafttoolkit::strings.updater.dependencies_installed'))
-                ->body("Installiert: {$result['installed']}, übersprungen: {$result['skipped']}, Fehler: " . count($result['errors']))
+                ->body("Installed: {$result['installed']}, skipped: {$result['skipped']}, errors: " . count($result['errors']))
                 ->status(count($result['errors']) > 0 ? 'warning' : 'success')
                 ->persistent(count($result['errors']) > 0)
                 ->send();
             $this->refreshPackages();
         } catch (MinecraftToolkitException $exception) {
-            $this->notifyError('Dependency-Installation fehlgeschlagen', $exception);
+            $this->notifyError('Dependency-Installation failed', $exception);
             $this->refreshPackages();
         } catch (\Throwable $exception) {
             report($exception);
-            $this->notifyUnexpectedError('Dependency-Installation fehlgeschlagen');
+            $this->notifyUnexpectedError('Dependency-Installation failed');
             $this->refreshPackages();
         }
     }
@@ -156,11 +156,11 @@ class MinecraftUpdaterPage extends Page
                 ->send();
             $this->refreshPackages();
         } catch (MinecraftToolkitException $exception) {
-            $this->notifyError('Paket konnte nicht gelöscht werden', $exception);
+            $this->notifyError('The package could not be deleted', $exception);
             $this->refreshPackages();
         } catch (\Throwable $exception) {
             report($exception);
-            $this->notifyUnexpectedError('Paket konnte nicht gelöscht werden');
+            $this->notifyUnexpectedError('The package could not be deleted');
             $this->refreshPackages();
         }
     }
@@ -171,16 +171,16 @@ class MinecraftUpdaterPage extends Page
             $result = app(MinecraftUpdateService::class)->updateAll($this->server(), $this->setup());
             Notification::make()
                 ->title(trans('minecrafttoolkit::strings.updater.updates_complete'))
-                ->body("Aktualisiert: {$result['updated']}, fehlgeschlagen: {$result['failed']}, gepinnt uebersprungen: {$result['skipped_pinned']}")
+                ->body("Updated: {$result['updated']}, failed: {$result['failed']}, pinned skipped: {$result['skipped_pinned']}")
                 ->status($result['failed'] > 0 ? 'warning' : 'success')
                 ->persistent($result['failed'] > 0)
                 ->send();
             $this->refreshPackages();
         } catch (MinecraftToolkitException $exception) {
-            $this->notifyError('Updates fehlgeschlagen', $exception);
+            $this->notifyError('Updates failed', $exception);
         } catch (\Throwable $exception) {
             report($exception);
-            $this->notifyUnexpectedError('Updates fehlgeschlagen');
+            $this->notifyUnexpectedError('Updates failed');
         }
     }
 
@@ -283,11 +283,11 @@ class MinecraftUpdaterPage extends Page
                 ->send();
             $this->refreshPackages();
         } catch (MinecraftToolkitException $exception) {
-            $this->notifyError('Pin-Aktion fehlgeschlagen', $exception);
+            $this->notifyError('Failed to pin package', $exception);
             $this->refreshPackages();
         } catch (\Throwable $exception) {
             report($exception);
-            $this->notifyUnexpectedError('Pin-Aktion fehlgeschlagen');
+            $this->notifyUnexpectedError('Failed to pin package');
             $this->refreshPackages();
         }
     }
@@ -336,8 +336,8 @@ class MinecraftUpdaterPage extends Page
                     'health' => $this->packageHealth($package, $check),
                     'can_install_dependencies' => $check?->status === 'error'
                         && is_string($check?->message)
-                        && (str_contains($check->message, 'Pflicht-Abhängigkeiten')
-                            || str_contains($check->message, 'Fehlende Plugin-Abhängigkeit')),
+                        && (str_contains($check->message, 'Mandatory Dependencies')
+                            || str_contains($check->message, 'Missing plugin dependency')),
                     'can_delete' => !$package->is_system_package,
                 ];
             })
@@ -350,7 +350,7 @@ class MinecraftUpdaterPage extends Page
             ->limit(20)
             ->get()
             ->map(fn (MinecraftToolkitUpdateCheck $check): array => [
-                'package' => $check->package?->project_name ?? 'Gelöschtes Paket',
+                'package' => $check->package?->project_name ?? 'Deleted Package',
                 'status' => $check->status,
                 'old_version' => $check->old_version_number,
                 'new_version' => $check->new_version_number,
@@ -445,7 +445,7 @@ class MinecraftUpdaterPage extends Page
     {
         Notification::make()
             ->title($title)
-            ->body('Wings oder eine externe Paketquelle ist derzeit nicht erreichbar. Technische Details wurden protokolliert.')
+            ->body('Wings or an external package source is currently unavailable. Technical details have been logged.')
             ->danger()
             ->persistent()
             ->send();
